@@ -1,7 +1,7 @@
 
 <!-- ABOUT THE PROJECT -->
 ## Repo Management Unit (RMU)
-Repo Management Units - Web
+Repo Management Units - Laravel API
 
 ### Built With
 
