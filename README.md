@@ -5,7 +5,7 @@ Repo Management Units - Laravel API
 
 ### Built With
 
-* Larvel
+* Laravel
 
 
 <!-- GETTING STARTED -->
