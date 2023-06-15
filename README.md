@@ -32,7 +32,3 @@ Repo Management Units - Laravel API
    ```sh
    php artisan serve
    ```
-Open [http://localhost:8000](http://localhost:8000) from your browser. 
-To access the admin panel, hit the link 
-[http://localhost:8000/](http://localhost:8000/) from your browser.
-The application comes with default user with email address `test@yopmail.com` and `123123123`.
