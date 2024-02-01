@@ -10,9 +10,10 @@ class spare_parts extends Model
     use HasFactory;
 
     protected $fillable = [
-        'model_id',
+        // 'model_id',
         'name',
         'price',
-        'inventory_code'
+        'status'
+        // 'inventory_code'
     ];
 }

@@ -14,39 +14,62 @@ class ColorController extends BaseController
 {
     //
 
-    public function createColor(Request $request){
-        $validator = Validator::make($request->all(), [
-            'name' => 'required',
-        ]);
-   
-        if($validator->fails()){
-            return $this->sendError('Validation Error.', $validator->errors());       
+    public function createColor(Request $request)
+    {
+
+        try {
+
+            $validator = Validator::make($request->all(), [
+                'code' => 'required',
+                'name' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $check = unit_color::where('name', $request->name)->where('code', $request->code)->count();
+
+            if ($check > 0) {
+                return $this->sendError('Validation Error.', 'Color already added!');
+            }
+
+            $color = unit_color::create($request->all());
+            return $this->sendResponse([], 'Color added successfully.');
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
         }
-
-        $check = unit_color::where('name', $request->name)->count();
-
-        if($check > 0){
-            return $this->sendError('Validation Error.', 'Color already added!');
-        }
-
-        $color = unit_color::create($request->all());
-        return $this->sendResponse([], 'Color added successfully.');
     }
 
-    public function colors(){
-        return unit_color::all();
+    public function colors()
+    {
+
+        try {
+
+            return unit_color::all();
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
+        }
     }
 
-    public function updateColor(Request $request, $id){
-        $validator = Validator::make($request->all(), [
-            'name' => 'required',
-        ]);
-   
-        if($validator->fails()){
-            return $this->sendError('Validation Error.', $validator->errors());       
-        }
+    public function updateColor(Request $request, $id)
+    {
 
-        $color = unit_color::where('id',$id)->update($request->all());
-        return $this->sendResponse([], 'Color updated successfully.');
+        try {
+
+            $validator = Validator::make($request->all(), [
+                'code' => 'required',
+                'name' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $color = unit_color::where('id', $id)->update($request->all());
+            return $this->sendResponse([], 'Color updated successfully.');
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
+        }
     }
 }

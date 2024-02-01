@@ -11,6 +11,8 @@ class branch extends Model
 
     protected $fillable = [
         'name',
+        'branchCode',
+        'warehouseID',
         'status'
     ];
 

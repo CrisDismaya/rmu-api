@@ -1,141 +1,194 @@
 <?php
+
 namespace App\Http\Traits;
+
 use App\Models\approval_activity_log;
 use App\Models\approval_matrix_setting;
-use DB;
-use Auth;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 
-trait helper {
+trait helper
+{
 
-	public function uuidGenerator(){
-		if (function_exists('com_create_guid')){
-            return com_create_guid();
-        }else{
-            mt_srand((double)microtime()*10000);
-            $charid = strtoupper(md5(uniqid(rand(), true)));
-            $hyphen = chr(45);// "-"
-            $uuid = chr(123)// "{"
-                .substr($charid, 0, 8).$hyphen
-                .substr($charid, 8, 4).$hyphen
-                .substr($charid,12, 4).$hyphen
-                .substr($charid,16, 4).$hyphen
-                .substr($charid,20,12)
-                .chr(125);// "}"
-            return $uuid;
-        }
+	public function uuidGenerator()
+	{
+		if (function_exists('com_create_guid')) {
+			return com_create_guid();
+		} else {
+			mt_srand((float)microtime() * 10000);
+			$charid = strtoupper(md5(uniqid(rand(), true)));
+			$hyphen = chr(45); // "-"
+			$uuid = chr(123) // "{"
+				. substr($charid, 0, 8) . $hyphen
+				. substr($charid, 8, 4) . $hyphen
+				. substr($charid, 12, 4) . $hyphen
+				. substr($charid, 16, 4) . $hyphen
+				. substr($charid, 20, 12)
+				. chr(125); // "}"
+			return $uuid;
+		}
 	}
-    
-    public function insert($table,$data = []){
-        $data['created_at'] = \Carbon\Carbon::now();
-        $data['updated_at'] = \Carbon\Carbon::now();
-        $data['createdby'] = Auth::user()->id;
-        $insert = DB::table($table)->insert($data);
-        $id = DB::getPdo()->lastInsertId();
-        $rec = DB::table($table)->where('id',$id)->first();
-        return $rec;
-    }
 
-    public function update($table,$data = [],$condition){
-        $update_data = DB::table($table)->where($condition)->update($data);
-        // $getUpdatedRecord = DB::table($table)->where($condition)->first();
-        return true;
-    }
+	public function insert($table, $data = [])
+	{
+		$data['created_at'] = \Carbon\Carbon::now();
+		$data['updated_at'] = \Carbon\Carbon::now();
+		$data['createdby'] = Auth::user()->id;
+		$insert = DB::table($table)->insert($data);
+		$id = DB::getPdo()->lastInsertId();
+		$rec = DB::table($table)->where('id', $id)->first();
+		return $rec;
+	}
 
-    public function getAll($table,$data = [],$condition,$jointables = [],$columns = []){
-        $get = DB::table($table);
-        if(count($jointables) > 0){
-            foreach($jointables as $tables){
-                $get->leftJoin(...$tables);
-            }
-        }
-        return $get->select($columns)->get();
-    }
+	public function update($table, $data = [], $condition)
+	{
+		$update_data = DB::table($table)->where($condition)->update($data);
+		// $getUpdatedRecord = DB::table($table)->where($condition)->first();
+		return true;
+	}
 
-    public function getByRecord($table,$data = [],$condition,$jointables = [],$columns = []){
-        $rec = DB::table($table)->where($condition);
-        if(count($jointables) > 0){
-            foreach($jointables as $tables){
-                $rec->leftJoin(...$tables);
-            }
-        }
-        return $rec->first();
-    }
+	public function getAll($table, $data = [], $condition, $jointables = [], $columns = [])
+	{
+		$get = DB::table($table);
+		if (count($jointables) > 0) {
+			foreach ($jointables as $tables) {
+				$get->leftJoin(...$tables);
+			}
+		}
+		return $get->select($columns)->get();
+	}
 
-    public function delete($table,$data = [],$condition){
-        $delete = DB::table($table)->where($condition)->delete();
+	public function getByRecord($table, $data = [], $condition, $jointables = [], $columns = [])
+	{
+		$rec = DB::table($table)->where($condition);
+		if (count($jointables) > 0) {
+			foreach ($jointables as $tables) {
+				$rec->leftJoin(...$tables);
+			}
+		}
+		return $rec->first();
+	}
 
-        return true;
-    }
+	public function delete($table, $data = [], $condition)
+	{
+		$delete = DB::table($table)->where($condition)->delete();
 
-    public function recordChecker($table,$condition){
-        $counter = DB::table($table)->where($condition)->count();
+		return true;
+	}
 
-        return $counter;
-    }
+	public function recordChecker($table, $condition)
+	{
+		$counter = DB::table($table)->where($condition)->count();
 
-    public function ApprovalMatrixActivityLog($module, $record_id){
+		return $counter;
+	}
 
-        //first get all the approver in the module
-        $get_approvers = approval_matrix_setting::where('module_id',$module)->get();
+	public function ApprovalMatrixActivityLog($module, $record_id)
+	{
 
-        if(count($get_approvers) == 0){
-            return ['status' => 'error', 'message' => 'Please setup approval matrix for this module thanks.!'];
-        }else{
+		//first get all the approver in the module
+		$get_approvers = approval_matrix_setting::where('module_id', $module)->get();
 
-            foreach($get_approvers as $approvers){
-               
-                foreach($approvers->signatories as $approver){
-                    $activity_matrix = new approval_activity_log;
-                    $activity_matrix->module_id = $module;
-                    $activity_matrix->rec_id = $record_id;
-                    $activity_matrix->user_id = $approver['user'];
-                    $activity_matrix->order = $approvers->level;
-                    $activity_matrix->save();
-                }
-               
-            }
+		if (count($get_approvers) == 0) {
+			return ['status' => 'error', 'message' => 'Please setup approval matrix for this module thanks.!'];
+		} else {
 
-            $get_first_approver = approval_activity_log::where('module_id',$module)
-                                                       ->where('rec_id',$record_id)
-                                                       ->first();
-            return ['status' => 'success', 'message' => $get_first_approver->user_id];
-           
-        }
+			foreach ($get_approvers as $approvers) {
 
-    }
+				foreach ($approvers->signatories as $approver) {
+					$activity_matrix = new approval_activity_log;
+					$activity_matrix->module_id = $module;
+					$activity_matrix->rec_id = $record_id;
+					$activity_matrix->user_id = $approver['user'];
+					$activity_matrix->order = $approvers->level;
+					$activity_matrix->save();
+				}
+			}
 
-    public function approverDecision($module, $record_id, $user){
+			$get_first_approver = approval_activity_log::where('module_id', $module)
+				->where('rec_id', $record_id)
+				->first();
+			return ['status' => 'success', 'message' => $get_first_approver->user_id];
+		}
+	}
 
-        //get the last level of approving level orders
-        $max_level = approval_activity_log::select('order')->where('module_id',$module)
-                                        ->where('rec_id',$record_id)
-                                        ->orderBy('order','DESC')
-                                        ->first();
+	public function approverDecision($module, $record_id, $user)
+	{
 
-        //get the approver level of order
-        $check_seq = approval_activity_log::where('module_id',$module)
-                                        ->where('rec_id',$record_id)
-                                        ->where('user_id',$user)
-                                        ->first();
+		try {
 
-        $decide = approval_activity_log::where('module_id',$module)
-                                        ->where('rec_id',$record_id)
-                                        ->where('user_id',$user)
-                                        ->update(['decision' => 'A']);
+			//get the last level of approving level orders
+			$max_level = approval_activity_log::select('order')->where('module_id', $module)
+				->where('rec_id', $record_id)
+				->whereNull('decision')
+				->orderBy('order', 'DESC')
+				->first();
 
-        if($max_level->order == $check_seq->order){
-            //if the user is the last level in approver return 0
-            return 0;
-        }else{
-            //get the next approver
-            $next =  approval_activity_log::select('user_id')->where('module_id',$module)
-                                                    ->where('rec_id',$record_id)
-                                                    ->where('order','>',$check_seq->order)
-                                                    ->orderBy('order','asc')->first();
+			//get the approver level of order
+			$check_seq = approval_activity_log::where('module_id', $module)
+				->where('rec_id', $record_id)
+				->whereNull('decision')
+				->where('user_id', $user)
 
-            return $next->user_id;
-        }
-    }
-	
+				->first();
+
+			$decide = approval_activity_log::where('module_id', $module)
+				->where('rec_id', $record_id)
+				->where('user_id', $user)
+				->whereNull('decision')
+				->update(['decision' => 'A']);
+
+			if ($max_level->order == $check_seq->order) {
+				//if the user is the last level in approver return 0
+				return 0;
+			} else {
+				//get the next approver
+				$next =  approval_activity_log::select('user_id')->where('module_id', $module)
+					->where('rec_id', $record_id)
+					->where('order', '>', $check_seq->order)
+					->whereNull('decision')
+					->orderBy('order', 'asc')->first();
+
+				return $next->user_id;
+			}
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function disapprovedDecision($module, $record_id, $user)
+	{
+		try {
+
+			$result = DB::table('approval_activity_logs')
+				->select(DB::raw('MIN(user_id) as userid'))
+				->where('module_id', '=', $module)
+				->where('rec_id', '=', $record_id)
+				->first();
+			$userId = $result->userid;
+
+
+			approval_activity_log::where('module_id', $module)
+				->where('rec_id', $record_id)
+				->update(['decision' => null]);
+
+			return $userId;
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function rollBaclDecision($module, $record_id, $user)
+	{
+		try {
+
+			approval_activity_log::where('module_id', $module)
+				->where('rec_id', $record_id)
+				->where('user_id', $user)
+				->update(['decision' => null]);
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
 }

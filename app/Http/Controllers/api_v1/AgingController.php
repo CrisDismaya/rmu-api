@@ -13,53 +13,69 @@ class AgingController extends BaseController
 {
     //
 
-    public function mapAging(Request $request){
+    public function mapAging(Request $request)
+    {
 
-        $validator = Validator::make($request->all(), [
-            'days' => 'required',
-            'Depreceiation_Cost' => 'required',
-            'Estimated_Cost_of_MD_Parts' => 'required',
-            'Max_Depreciation_from_Original_SP' => 'required',
-            'Immediate_Sales_Value' => 'required',
-        ]);
-   
-        if($validator->fails()){
-            return $this->sendError('Validation Error.', $validator->errors());       
+        try {
+
+            $validator = Validator::make($request->all(), [
+                'days' => 'required',
+                'Depreceiation_Cost' => 'required',
+                'Estimated_Cost_of_MD_Parts' => 'required',
+                'Max_Depreciation_from_Original_SP' => 'required',
+                'Immediate_Sales_Value' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $check = unit_aging::where('days', $request->days)->count();
+
+            if ($check > 0) {
+                return $this->sendError('Validation Error.', 'Aging day already added!');
+            }
+
+            $aging = unit_aging::create($request->all());
+
+            return $this->sendResponse([], 'Aging added successfully.');
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
         }
-
-        $check = unit_aging::where('days',$request->days)->count();
-
-        if($check > 0){
-            return $this->sendError('Validation Error.', 'Aging day already added!');
-        }
-
-        $aging = unit_aging::create($request->all());
-     
-        return $this->sendResponse([], 'Aging added successfully.');
-
     }
 
-    public function getAging(){
-        return unit_aging::all();
-    }
+    public function getAging()
+    {
 
-    public function updateAging(Request $request,$id){
+        try {
 
-        $validator = Validator::make($request->all(), [
-            'days' => 'required',
-            'Depreceiation_Cost' => 'required',
-            'Estimated_Cost_of_MD_Parts' => 'required',
-            'Max_Depreciation_from_Original_SP' => 'required',
-            'Immediate_Sales_Value' => 'required',
-        ]);
-   
-        if($validator->fails()){
-            return $this->sendError('Validation Error.', $validator->errors());       
+            return unit_aging::all();
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
         }
-
-        $aging = unit_aging::where('id',$id)->update($request->all());
-        return $this->sendResponse([], 'Aging updated successfully.');
-        
     }
-    
+
+    public function updateAging(Request $request, $id)
+    {
+
+        try {
+
+            $validator = Validator::make($request->all(), [
+                'days' => 'required',
+                'Depreceiation_Cost' => 'required',
+                'Estimated_Cost_of_MD_Parts' => 'required',
+                'Max_Depreciation_from_Original_SP' => 'required',
+                'Immediate_Sales_Value' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $aging = unit_aging::where('id', $id)->update($request->all());
+            return $this->sendResponse([], 'Aging updated successfully.');
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
+        }
+    }
 }

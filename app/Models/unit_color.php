@@ -10,6 +10,7 @@ class unit_color extends Model
     use HasFactory;
 
     protected $fillable = [
+        'code',
         'name',
     ];
 

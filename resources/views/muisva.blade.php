@@ -61,7 +61,7 @@
 		.tbl-col-5 {
 			width: 13%;
 		}
-		
+
 		.signatures label {
 			font-size: 13px;
 		}
@@ -111,7 +111,7 @@
 		.text-center { text-align: center; }
 		.text-right { text-align: right; }
 		.text-danger { color: red; }
-		
+
 		.text-amount { padding-right: 15px; }
 
 		.tr-space-1 { padding: 1px; }
@@ -136,7 +136,16 @@
 	</style>
 </head>
 <body>
+	<?php
+		$dataExtract = $data['datas'];
+		$decodedData = json_decode($dataExtract);
+
+		$partsExtract = $data['parts'];
+		$decodedParts = json_decode($partsExtract);
+	?>
+
 	<div style="position: relative; margin: 0 auto; width: 100%; font-family: sans-serif;">
+
 		<table class="">
 		{{-- <table class="table-bordered"> --}}
 			<tr>
@@ -184,11 +193,11 @@
 			<tr>
 				<td class="text-bold" colspan="6"> Name of Company </td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="19">{{ $data[0]->company_name }}</td>
+				<td class="border-bottom" colspan="19">{{ $decodedData[0]->company_name }}</td>
 				<td class="" colspan="3"></td>
 				<td class="text-bold" colspan="4"> MUISVA No. </td>
 				<td class="text-center text-bold"> : </td>
-				<td class="border-bottom text-center text-danger" colspan="6">{{ $data[0]->muisva_no }}</td>
+				<td class="border-bottom text-center text-danger" colspan="6">{{ $decodedData[0]->muisva_no }}</td>
 			</tr>
 			<tr><td class="tr-space-1" colspan="40"></td></tr>
 			<tr>
@@ -210,12 +219,12 @@
 			<tr>
 				<td class="" colspan="12">Dealer's Store</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="27">{{ $data[0]->dealer_store }}</td>
+				<td class="border-bottom" colspan="27">{{ $decodedData[0]->dealer_store }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="12">Originating Financing Store</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="27">{{ $data[0]->originating_financing_store }}</td>
+				<td class="border-bottom" colspan="27">{{ $decodedData[0]->originating_financing_store }}</td>
 			</tr>
 			<tr>
 				<td class=""> I </td>
@@ -230,18 +239,18 @@
 				<td class="text-center" colspan="">1</td>
 				<td class="" colspan="10">Latest Borrower's Name</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->latest_borrower_name }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->latest_borrower_name }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Original Owner</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->original_owner }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->original_owner }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan="">2</td>
 				<td class="" colspan="10">Address</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="27">{{ $data[0]->address }}</td>
+				<td class="border-bottom" colspan="27">{{ $decodedData[0]->address }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan=""></td>
@@ -254,41 +263,41 @@
 				<td class="" colspan="3"></td>
 				<td class="" colspan="9">Folder No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->folder_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->folder_no }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Loan Amount</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom text-right text-amount" colspan="10">{{ $data[0]->loan_amount }}</td>
+				<td class="border-bottom text-right text-amount" colspan="10">{{ $decodedData[0]->loan_amount }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="9">Date Granted</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->date_granted }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->date_granted }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Total Payment</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom text-right text-amount" colspan="10">{{ $data[0]->total_payment }}</td>
+				<td class="border-bottom text-right text-amount" colspan="10">{{ $decodedData[0]->total_payment }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="9">Date Due</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->date_due }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->date_due }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Principal Balance</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom text-right text-amount" colspan="10">{{ $data[0]->principal_balance }}</td>
+				<td class="border-bottom text-right text-amount" colspan="10">{{ $decodedData[0]->principal_balance }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="9">Last date of payment</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->late_date_of_payment }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->late_date_of_payment }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Repo Date</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->repo_date }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->repo_date }}</td>
 			</tr>
 			<tr>
 				<td class=""> II </td>
@@ -302,41 +311,41 @@
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Brand</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->brand }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->brand }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Model</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->model }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->model }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Engine No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->engine_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->engine_no }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Chassis No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->chassis_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->chassis_no }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">OR No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->or_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->or_no }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">CRE No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->cre_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->cre_no }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Plate No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->plate_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->plate_no }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">BR / ARV No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $data[0]->br_or_arv_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->br_or_arv_no }}</td>
 			</tr>
 			<tr>
 				<td class=""> III </td>
@@ -350,23 +359,23 @@
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Classification</td>
 				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $data[0]->classification == 'A' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'A' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Classs A</td>
 				<td class="" colspan=""></td>
-				
-				<td class="text-center" colspan=""><div class="{{ $data[0]->classification == 'B' ? 'box-filled' : 'box' }}"></div></td>
+
+				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'B' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Classs B</td>
 				<td class="" colspan=""></td>
-				
-				<td class="text-center" colspan=""><div class="{{ $data[0]->classification == 'C' ? 'box-filled' : 'box' }}"></div></td>
+
+				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'C' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Classs C</td>
 				<td class="" colspan=""></td>
-				
-				<td class="text-center" colspan=""><div class="{{ $data[0]->classification == 'D' ? 'box-filled' : 'box' }}"></div></td>
+
+				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'D' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Classs D</td>
 				<td class="" colspan=""></td>
-				
-				<td class="text-center" colspan=""><div class="{{ $data[0]->classification == 'E' ? 'box-filled' : 'box' }}"></div></td>
+
+				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'E' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Classs E</td>
 				<td class="" colspan="2"></td>
 			</tr>
@@ -378,25 +387,25 @@
 				<td class="" colspan="">CD</td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">ID</td>
-				
+
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">CD</td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">ID</td>
-				
+
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">CD</td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">ID</td>
-				
+
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">CD</td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">ID</td>
-				
+
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan=""><div class="box"></div></td>
 				<td class="" colspan="">CD</td>
@@ -438,8 +447,8 @@
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
-				<td class="" colspan="">1</td>
-				<td class="" colspan="17">Chassis</td>
+				<td class="" colspan=""></td>
+				<td class="" colspan="17">Parts</td>
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan="4">Missing</td>
 				<td class="" colspan=""></td>
@@ -447,89 +456,63 @@
 				<td class="" colspan=""></td>
 				<td class="" colspan="8">Cost</td>
 			</tr>
-			{{-- chassis --}}
-			<tr>
-				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="17"></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="border-bottom text-right text-amount" colspan="8"></td>
-			</tr>
-			<tr>
-				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="17"></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="border-bottom text-right text-amount" colspan="8"></td>
-			</tr>
-			<tr><td class="tr-space-1" colspan="40"></td></tr>
-
-			{{-- engine --}}
-			<tr>
-				<td class="" colspan="3"></td>
-				<td class="" colspan="">2</td>
-				<td class="" colspan="36">Engine</td>
-			</tr>
-			<tr>
-				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="17"></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="border-bottom text-right text-amount" colspan="8"></td>
-			</tr>
-			<tr>
-				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="17"></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="border-bottom text-right text-amount" colspan="8"></td>
-			</tr>
-			<tr><td class="tr-space-1" colspan="40"></td></tr>
-			
-			{{-- electrical --}}
-			<tr>
-				<td class="" colspan="3"></td>
-				<td class="" colspan="">3</td>
-				<td class="" colspan="36">Electrical</td>
-			</tr>
-			<tr>
-				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="17"></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="border-bottom text-right text-amount" colspan="8"></td>
-			</tr>
-			<tr>
-				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="17"></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan="4"><div class="box"></div></td>
-				<td class="" colspan=""></td>
-				<td class="border-bottom text-right text-amount" colspan="8"></td>
-			</tr>
+			<?php $total = 0; ?>
+			@if (count($decodedParts) > 0)
+				@for ($i = 0; $i < count($decodedParts); $i++)
+					<tr>
+						<td class="" colspan="4"></td>
+						<td class="border-bottom" colspan="17"> {{ $decodedParts[$i]->parts_name }} </td>
+						<td class="" colspan=""></td>
+						<td class="text-center" colspan="4"><div class="{{ $decodedParts[$i]->parts_status == 'Missing' ? 'box-filled' : 'box' }}"></div></td>
+						<td class="" colspan=""></td>
+						<td class="text-center" colspan="4"><div class="{{ $decodedParts[$i]->parts_status == 'Damaged' ? 'box-filled' : 'box' }}"></div></td>
+						<td class="" colspan=""></td>
+						<td class="border-bottom text-right text-amount" colspan="8">{{ $decodedParts[$i]->parts_price }}</td>
+					</tr>
+					<tr><td class="tr-space-1" colspan="40"></td></tr>
+					<?php $total = $total + $decodedParts[$i]->parts_price; ?>
+				@endfor
+			@else
+				<tr>
+					<td class="" colspan="4"></td>
+					<td class="border-bottom" colspan="17"> </td>
+					<td class="" colspan=""></td>
+					<td class="text-center" colspan="4"><div class="box"></div></td>
+					<td class="" colspan=""></td>
+					<td class="text-center" colspan="4"><div class="box"></div></td>
+					<td class="" colspan=""></td>
+					<td class="border-bottom text-right text-amount" colspan="8"></td>
+				</tr>
+				<tr><td class="tr-space-1" colspan="40"></td></tr>
+				<tr>
+					<td class="" colspan="4"></td>
+					<td class="border-bottom" colspan="17"> </td>
+					<td class="" colspan=""></td>
+					<td class="text-center" colspan="4"><div class="box"></div></td>
+					<td class="" colspan=""></td>
+					<td class="text-center" colspan="4"><div class="box"></div></td>
+					<td class="" colspan=""></td>
+					<td class="border-bottom text-right text-amount" colspan="8"></td>
+				</tr>
+				<tr><td class="tr-space-1" colspan="40"></td></tr>
+				<tr>
+					<td class="" colspan="4"></td>
+					<td class="border-bottom" colspan="17"> </td>
+					<td class="" colspan=""></td>
+					<td class="text-center" colspan="4"><div class="box"></div></td>
+					<td class="" colspan=""></td>
+					<td class="text-center" colspan="4"><div class="box"></div></td>
+					<td class="" colspan=""></td>
+					<td class="border-bottom text-right text-amount" colspan="8"></td>
+				</tr>
+				<tr><td class="tr-space-1" colspan="40"></td></tr>
+			@endif
 
 			{{-- total --}}
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="29">Total Missing / Damaged Parts Cost</td>
-				<td class="border-bottom text-right text-amount" colspan="8" style="border-bottom: 2px double black;"></td>
+				<td class="border-bottom text-right text-amount" colspan="8" style="border-bottom: 2px double black;">{{ $total }}</td>
 			</tr>
 			<tr><td class="tr-space-1" colspan="40"></td></tr>
 

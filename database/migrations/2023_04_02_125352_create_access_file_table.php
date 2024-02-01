@@ -16,6 +16,7 @@ class CreateAccessFileTable extends Migration
         Schema::create('files', function (Blueprint $table) {
             $table->bigInteger('id', true);
             $table->string('filename');
+            $table->integer('isRequired');
             $table->enum('status', [1, 2])->default(1);
             $table->timestamps();
         });

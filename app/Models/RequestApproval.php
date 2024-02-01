@@ -21,6 +21,7 @@ class RequestApproval extends Model
         'approved_price',
         'approver',
         'date_approved',
+        'status',
         'remarks',
         'created_by'
     ];

@@ -18,6 +18,8 @@ class CreateRefurbishDetailsTable extends Migration
             $table->BigInteger('refurbish_id');
             $table->BigInteger('spare_parts');
             $table->float('price');
+            $table->float('actual_price')->default(0);
+            $table->enum('status',['na','done'])->nullable();
             $table->timestamps();
         });
     }

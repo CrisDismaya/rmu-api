@@ -15,11 +15,12 @@ class CreateSparePartsTable extends Migration
     {
         Schema::create('spare_parts', function (Blueprint $table) {
             $table->bigInteger('id',true);
-            $table->string('inventory_code');
-            $table->bigInteger('model_id');
-            $table->foreign('model_id')->references('id')->on('unit_models');
+            // $table->string('inventory_code');
+            // $table->bigInteger('model_id');
+            // $table->foreign('model_id')->references('id')->on('unit_models');
             $table->string('name');
             $table->double('price');
+            $table->enum('status',['I','A'])->default('A');
             $table->timestamps();
         });
     }

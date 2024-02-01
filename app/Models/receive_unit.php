@@ -19,6 +19,9 @@ class receive_unit extends Model
 		'total_payments',
 		'principal_balance',
 		'is_certified_no_parts',
+		'original_owner',
+		'approver',
+		'date_approved',
 	];
 
 	function repo_details(){

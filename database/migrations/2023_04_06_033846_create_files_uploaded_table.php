@@ -16,6 +16,7 @@ class CreateFilesUploadedTable extends Migration
 		Schema::create('files_uploaded', function (Blueprint $table) {
 			$table->bigInteger('id', true);
 			$table->integer('module_id');
+			$table->integer('branch_id');
 			$table->integer('reference_id');
 			$table->integer('files_id');
 			$table->string('files_name');

@@ -15,6 +15,7 @@ class CreateUnitColorsTable extends Migration
     {
         Schema::create('unit_colors', function (Blueprint $table) {
             $table->bigInteger('id',true);
+            $table->string('code');
             $table->string('name');
             $table->timestamps();
         });

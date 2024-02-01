@@ -15,22 +15,22 @@ class CreateCustomerProfileTable extends Migration
     {
         Schema::create('customer_profile', function (Blueprint $table) {
             $table->bigInteger('id', true);
-            $table->string('acumatica_id');
+            $table->string('acumatica_id')->nullable();
             $table->string('firstname');
             $table->string('middlename')->nullable();
             $table->string('lastname');
             $table->string('contact');
-            $table->string('address');
-            $table->string('provinces')->nullable();
-            $table->string('cities')->nullable();
-            $table->string('barangays')->nullable();
+            $table->string('address')->nullable();
+            $table->string('provinces');
+            $table->string('cities');
+            $table->string('barangays');
             $table->string('zip_code')->nullable();
-            $table->string('nationality')->nullable();
-            $table->string('source_of_income')->nullable();
-            $table->string('marital_status')->nullable();
-            $table->string('date_birth')->nullable();
-            $table->string('birth_place')->nullable();
-            $table->string('primary_id')->nullable();
+            $table->string('nationality');
+            $table->string('source_of_income');
+            $table->string('marital_status');
+            $table->string('date_birth');
+            $table->string('birth_place');
+            $table->string('primary_id');
             $table->string('primary_id_no')->nullable();
             $table->string('alternative_id')->nullable();
             $table->string('alternative_id_no')->nullable();

@@ -23,7 +23,7 @@ class CreateRequestRefurbishesTable extends Migration
             $table->json('files_names')->nullable();
 			$table->json('paths')->nullable();
             $table->string('remarks')->nullable();
-            $table->enum('status',['0','1','2'])->default('0');
+            $table->enum('status',['0','1','2','3','4'])->default('0'); //3 - pending for approval refurbish process, 4 -approved back to inventory
             $table->timestamps();
         });
     }

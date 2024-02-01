@@ -16,17 +16,21 @@ class CreateSoldUnitsTable extends Migration
         Schema::create('sold_units', function (Blueprint $table) {
             $table->id();
             $table->BigInteger('repo_id');
+            $table->BigInteger('branch');
             $table->BigInteger('new_customer');
             $table->string('invoice_reference_no');
+            $table->string('ExternalReference')->nullable();
+            $table->string('AgentID')->nullable();
             $table->enum('sale_type',['I','C']);
             $table->float('srp');
-            $table->float('dp');
-            $table->float('monthly_amo');
-            $table->float('rebate');
-            $table->integer('terms');
-            $table->float('rate');
-            $table->float('interest_rate');
-            $table->float('amount_finance');
+            $table->float('dp')->nullable();
+            $table->float('amount_paid')->nullable();
+            $table->float('monthly_amo')->nullable();
+            $table->float('rebate')->nullable();
+            $table->integer('terms')->nullable();
+            $table->float('rate')->nullable();
+            $table->float('interest_rate')->nullable();
+            $table->float('amount_finance')->nullable();
             $table->date('sold_date');
             $table->BigInteger('maker');
             $table->BigInteger('approver');

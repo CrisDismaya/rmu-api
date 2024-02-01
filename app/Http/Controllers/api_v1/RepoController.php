@@ -11,264 +11,634 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use App\Models\repo;
 use App\Models\FilesUploaded;
+use App\Models\receive_unit;
+use App\Models\unit_spare_parts;
+use App\Models\approval_matrix_setting;
+use App\Http\Traits\helper;
+use Illuminate\Support\Carbon;
+use Intervention\Image\Facades\Image;
 
 class RepoController extends BaseController
 {
 
-   public function createRepo(Request $request){
+	use helper;
 
-		$validator = Validator::make($request->all(), [
-			'customer_acumatica_id' => 'required',
-			'brand_id' => 'required|numeric',
-			'model_id' => 'required|numeric',
-			'plate_number' => 'required|string',
-			'model_engine' => 'required|string',
-			'model_chassis' => 'required|string',
-			'color_id' => 'required|numeric',
-			'mv_file_number' => 'required|string',
-			'type' => 'required|string',
-			'classification' => 'required|string',
-			'series' => 'required|string',
-			'body' => 'required|string',
-			'year_model' => 'required|integer',
-			'gross_vehicle_weight' => 'required|string',
-			'original_srp' => 'required|numeric',
-			'date_sold' => 'required|date',
-			'insurer' => 'required|string',
-			'cert_cover_no' => 'required|string',
-			'expiry_date' => 'required|date',
-			'encumbered_to' => 'nullable|string',
-			'leased_to' => 'nullable|string',
-			'latest_or_number' => 'required|string',
-			'date_last_registration' => 'required|date',
-			'amount_paid' => 'required|numeric',
-			'date_surrender' => 'required|date',
-			'msuisva_form_no' => 'required|string',
-			'append_count' => 'required',
-			'module_id' => 'required',
-			'image_*' => 'nullable',
-			'image_id_*' => 'nullable',
-			'image_name_*' => 'nullable',
-		]);
+	public function createRepo(Request $request)
+	{
+		try{
+			$validator = Validator::make($request->all(), [
+				'repo_id' => 'required',
+				'customer_acumatica_id' => 'required',
+				'brand_id' => 'required',
+				'model_id' => 'required',
+				'plate_number' => 'required',
+				'model_engine' => 'required',
+				'model_chassis' => 'required',
+				'color_id' => 'required',
+				'mv_file_number' => 'nullable',
+				'classification' => 'required',
+				'year_model' => 'required',
+				'original_srp' => 'required',
+				'date_sold' => 'required',
+				'original_owner' => 'required',
+				'unit_loan_amount' => 'required',
+				'unit_total_payment' => 'required',
+				'unit_principal_balance' => 'required',
+				// 'msuisva_form_no' => 'required',
+				'date_surrender' => 'required',
+				'location' => 'required',
+				'certify_no_missing_and_damaged_parts' => 'required',
+				'append_count' => 'required',
+				'module_id' => 'required',
+				'loan_number' => 'required',
+				'odo_meter' => 'required',
 
-		if ($validator->fails()) {
-			return $this->sendError('Validation Error.', $validator->errors()); 
-		}
+				'image_fetch_id_*' => 'nullable',
+				'image_*' => 'nullable',
+				'image_id_*' => 'nullable',
+				'image_name_*' => 'nullable',
 
-		$checker = DB::table('repo_details as rep')
-			->select('model_engine', 'model_chassis', 'is_sold')
-			->leftJoin('recieve_unit_details as rud', 'rep.id', 'rud.repo_id')
-			->where('rud.is_sold', '=', 'Y')
-			->where('rep.model_engine', '=', $request->model_engine)
-			->where('rep.model_chassis', '=', $request->model_chassis)
-			->get()->count();
+				'spare_parts_id_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_status_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_price_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_remarks_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_count' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+			]);
 
-		if($checker > 0){
-			return $this->sendError([], 'The existing Unit is not been sold'); 
-		}
+			if ($validator->fails()) {
+				return $this->sendError('Validation Error.', $validator->errors());
+			}
 
-		$format = [
-			'branch_id' => Auth::user()->branch,
-			'customer_acumatica_id' => $request->customer_acumatica_id,
-			'brand_id' => $request->brand_id,
-			'model_id' => $request->model_id,
-			'plate_number' => $request->plate_number,
-			'model_engine' => $request->model_engine,
-			'model_chassis' => $request->model_chassis,
-			'color_id' => $request->color_id,
-			'mv_file_number' => $request->mv_file_number,
-			'type' => $request->type,
-			'classification' => $request->classification,
-			'series' => $request->series,
-			'body' => $request->body,
-			'year_model' => $request->year_model,
-			'gross_vehicle_weight' => $request->gross_vehicle_weight,
-			'original_srp' => $request->original_srp,
-			'date_sold' => $request->date_sold,
-			'insurer' => $request->insurer,
-			'cert_cover_no' => $request->cert_cover_no,
-			'expiry_date' => $request->expiry_date,
-			'encumbered_to' => $request->encumbered_to,
-			'leased_to' => $request->leased_to,
-			'latest_or_number' => $request->latest_or_number,
-			'date_last_registration' => $request->date_last_registration,
-			'amount_paid' => $request->amount_paid,
-			'date_sold' => $request->date_sold,
-			'date_surrender' => $request->date_surrender,
-			'msuisva_form_no' => $request->msuisva_form_no
-		];
+			$checker = 	DB::table('repo_details as rep')
+				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
+				->whereRaw('UPPER(rep.model_engine) = UPPER(?)', [$request->model_engine])
+				->whereRaw('UPPER(rep.model_chassis) = UPPER(?)', [$request->model_chassis])
+				->groupBy('rud.is_sold')
+				->select(DB::raw('count(rep.id) as isExist'), 'rud.is_sold')
+				->first();
 
-		$repo = repo::create($format);
-		$latestInsertedId = $repo->id;
-
-		$path = 'image/unit_received/'. strtoupper($request->model_engine .'-'. $request->model_chassis);
-		$directory = public_path($path);
-		if(!File::isDirectory($directory)){
-			File::makeDirectory($directory, 0777, true, true);
-		}
-
-		for ($i = 1; $i <= $request->append_count; $i++) { 
-			$image = $request->file("image_{$i}");
-			if($image){
-				$image_name = strtoupper(uniqid().'-'.$image->getClientOriginalName());
-				$image->move($directory, $image_name);
-
-				$image_format = [
-					'reference_id' => $latestInsertedId,
-					'module_id' => $request->module_id,
-					'files_id' => $request->input("image_id_{$i}"),
-					'files_name' => $request->input("image_name_{$i}"),
-					'path' => $path.'/'.$image_name,
+			if (!empty($checker) && $checker->isExist > 0 && $checker->is_sold == 'N') {
+				return $this->sendError([], 'Unit already exists');
+			}
+			else {
+				$repo_format = [
+					'branch_id' => Auth::user()->branch,
+					'location' => $request->location,
+					'customer_acumatica_id' => $request->customer_acumatica_id,
+					'brand_id' => $request->brand_id,
+					'model_id' => $request->model_id,
+					'plate_number' => $request->plate_number,
+					'model_engine' => $request->model_engine,
+					'model_chassis' => $request->model_chassis,
+					'color_id' => $request->color_id,
+					'mv_file_number' => $request->mv_file_number,
+					'classification' => $request->classification,
+					'year_model' => $request->year_model,
+					'original_srp' => $request->original_srp,
+					'date_sold' => $request->date_sold,
+					'date_surrender' => $request->date_surrender,
+					// 'msuisva_form_no' => $request->msuisva_form_no,
+					'loan_number' => $request->loan_number,
+					'odo_meter' => $request->odo_meter,
 				];
 
-				FilesUploaded::create($image_format);
-			}
-		}
-		
-		return $this->sendResponse([], 'REPO Ddetails added successfully.');
-	}
+				DB::beginTransaction();
 
-	public function repo(){
-		return DB::select("SELECT 
-				rep.*, brd.brandname, mdl.model_name, cus.acumatica_id,
-				CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name
-			FROM repo_details AS rep
-			INNER JOIN customer_profile AS cus ON rep.customer_acumatica_id = cus.id
-			LEFT JOIN brands AS brd ON rep.brand_id = brd.id
-			LEFT JOIN unit_models AS mdl ON rep.model_id = mdl.id
-			WHERE rep.branch_id = ?
-			AND NOT EXISTS(
-				SELECT rud.*
-				FROM stock_transfer_approval sta
-				INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
-				INNER JOIN recieve_unit_details rud ON stu.recieved_unit_id = rud.id
-				WHERE sta.status = 1 AND sta.from_branch = rep.branch_id AND rud.repo_id = rep.id
-			)",
-			array( Auth::user()->branch )
-		);
-	}
+				$repo = repo::create($repo_format);
+				$latestInsertedId = $repo->id;
 
-	public function repoDetailsPerId($id, $moduleid){
-		$received_units = repo::with([ 'customer_details', 'brand_details', 'model_details', 'color_details', 
-			'picture_details' => function($query) use ($moduleid) {
-				$query->where('module_id', '=', $moduleid);
-		  }
-		])
-			->where('id', $id)->first();
+				$msuisva = date("Y")."-".str_pad($latestInsertedId, (strlen($latestInsertedId) > 5 ? strlen($latestInsertedId) + 1 : 5), '0', STR_PAD_LEFT);
+				DB::table('repo_details')->where('id', $latestInsertedId)->update(['msuisva_form_no' => $msuisva]);
 
-		return $received_units;
-	}
+				$path = 'image/unit_received/' . strtoupper($request->model_engine . '-' . $request->model_chassis);
+				$directory = public_path($path);
+				if (!File::isDirectory($directory)) {
+					File::makeDirectory($directory, 0777, true, true);
+				}
 
-	public function list_of_files(){
-		$files = DB::table('files')
-			->where('status', '=', '1')
-			->get();
+				for ($i = 1; $i <= $request->append_count; $i++) {
+					$image = $request->file("image_{$i}");
+					if ($image) {
+						$image_name = strtoupper(uniqid()) . '_' . strtolower(str_replace(' ', '_', str_replace('* ', '', $request->input("image_name_{$i}")))) . '.' . $image->getClientOriginalExtension();
+						$image->move($directory, $image_name);
 
-		return $files;
-	}
+						$image_format = [
+							'module_id' => $request->module_id,
+							'branch_id' => Auth::user()->branch,
+							'reference_id' => $latestInsertedId,
+							'files_id' => intval($request->input("image_id_{$i}")),
+							'files_name' => str_replace('* ', '', $request->input("image_name_{$i}")),
+							'path' => $path . '/' . $image_name,
+						];
 
-	public function repoDeleteFiles($deleted_id){
-		$filename = FilesUploaded::Where('id', $deleted_id)->first();
-		FilesUploaded::where('id', $filename->id)->update([
-			'is_deleted' => '1'
-		]);
-		return $filename->files_name;
-	}
+						FilesUploaded::create($image_format);
+					}
+				}
 
-	public function updateRepo(Request $request, $id){
-		$validator = Validator::make($request->all(), [
-			'customer_acumatica_id' => 'required',
-			'brand_id' => 'required|numeric',
-			'model_id' => 'required|numeric',
-			'plate_number' => 'required|string',
-			'model_engine' => 'required|string',
-			'model_chassis' => 'required|string',
-			'color_id' => 'required|numeric',
-			'mv_file_number' => 'required|string',
-			'type' => 'required|string',
-			'classification' => 'required|string',
-			'series' => 'required|string',
-			'body' => 'required|string',
-			'year_model' => 'required|integer',
-			'gross_vehicle_weight' => 'required|string',
-			'original_srp' => 'required|numeric',
-			'date_sold' => 'required|date',
-			'insurer' => 'required|string',
-			'cert_cover_no' => 'required|string',
-			'expiry_date' => 'required|date',
-			'encumbered_to' => 'nullable|string',
-			'leased_to' => 'nullable|string',
-			'latest_or_number' => 'required|string',
-			'date_last_registration' => 'required|date',
-			'amount_paid' => 'required|numeric',
-			'date_surrender' => 'required|date',
-			'msuisva_form_no' => 'required|string',
-			'append_count' => 'required',
-			'module_id' => 'required',
-			'image_*' => 'required',
-			'image_id_*' => 'required',
-			'image_name_*' => 'required',
-		]);
-
-		if ($validator->fails()) {
-			return $this->sendError('Validation Error.', $validator->errors()); 
-		}
-
-		$format = [
-			'customer_acumatica_id' => $request->customer_acumatica_id,
-			'brand_id' => $request->brand_id,
-			'model_id' => $request->model_id,
-			'plate_number' => $request->plate_number,
-			'model_engine' => $request->model_engine,
-			'model_chassis' => $request->model_chassis,
-			'color_id' => $request->color_id,
-			'mv_file_number' => $request->mv_file_number,
-			'type' => $request->type,
-			'classification' => $request->classification,
-			'series' => $request->series,
-			'body' => $request->body,
-			'year_model' => $request->year_model,
-			'gross_vehicle_weight' => $request->gross_vehicle_weight,
-			'original_srp' => $request->original_srp,
-			'date_sold' => $request->date_sold,
-			'insurer' => $request->insurer,
-			'cert_cover_no' => $request->cert_cover_no,
-			'expiry_date' => $request->expiry_date,
-			'encumbered_to' => $request->encumbered_to,
-			'leased_to' => $request->leased_to,
-			'latest_or_number' => $request->latest_or_number,
-			'date_last_registration' => $request->date_last_registration,
-			'amount_paid' => $request->amount_paid,
-			'date_sold' => $request->date_sold,
-			'date_surrender' => $request->date_surrender,
-			'msuisva_form_no' => $request->msuisva_form_no
-		];
-
-		repo::where('id', '=', $id)->update($format);
-
-		$path = 'image/unit_received/'. strtoupper($request->model_engine .'-'. $request->model_chassis);
-		$directory = public_path($path);
-		if(!File::isDirectory($directory)){
-			File::makeDirectory($directory, 0777, true, true);
-		}
-
-		for ($i = 1; $i <= $request->append_count; $i++) { 
-			$image = $request->file("image_{$i}");
-			if($image){
-				$image_name = strtoupper(uniqid().'-'.$image->getClientOriginalName());
-				$image->move($directory, $image_name);
-
-				$image_format = [
-					'reference_id' => $id,
-					'module_id' => $request->module_id,
-					'files_id' => $request->input("image_id_{$i}"),
-					'files_name' => $request->input("image_name_{$i}"),
-					'path' => $path.'/'.$image_name,
+				$receive_format = [
+					'branch' => Auth::user()->branch,
+					'repo_id' => $latestInsertedId,
+					'unit_price' => $request->original_srp,
+					'loan_amount' => $request->unit_loan_amount,
+					'total_payments' => $request->unit_total_payment,
+					'principal_balance' => $request->unit_principal_balance,
+					'is_certified_no_parts' => $request->certify_no_missing_and_damaged_parts,
+					'original_owner' => $request->original_owner,
 				];
 
-				FilesUploaded::create($image_format);
+				$receive_unit = receive_unit::create($receive_format);
+				$receive_latestInsertedId = $receive_unit->id;
+
+				for ($i = 1; $i <= $request->spare_parts_count; $i++) {
+					if ($request->input("spare_parts_id_{$i}")) {
+						$spare_parts_format = [
+							'recieve_id' => $receive_latestInsertedId,
+							'parts_id' => $request->input("spare_parts_id_{$i}"),
+							'parts_status' => $request->input("spare_parts_status_{$i}"),
+							'price' => $request->input("spare_parts_price_{$i}"),
+							'parts_remarks' => $request->input("spare_parts_remarks_{$i}")
+						];
+						unit_spare_parts::create($spare_parts_format);
+					}
+				}
+
+				$module = DB::table('system_menu')->where('file_path', '=', 'repo_tagging_approval.php')->first();
+				$matrix =  $this->ApprovalMatrixActivityLog($module->id, $receive_latestInsertedId);
+				if ($matrix['status'] == 'error') {
+					return $matrix;
+				} else {
+					receive_unit::where('id', $receive_latestInsertedId)->update(['approver' => $matrix['message'], 'date_approved' => null]);
+				}
+
+				DB::commit();
+				return $this->sendResponse([], 'REPO Ddetails added successfully.');
 			}
 		}
-		return $this->sendResponse([], 'REPO Ddetails update successfully.');
+		catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function repo()
+	{
+		try {
+
+			$list_of_repos = DB::table('repo_details as rep')
+				->select(
+					'rep.*',
+					'cus.acumatica_id',
+					DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
+					'brd.brandname',
+					'mdl.model_name',
+					'rep.model_engine',
+					'rep.model_chassis',
+					DB::raw(
+						"CASE
+						WHEN rud.status = '4' THEN 'Repo Tagging Approval'
+						WHEN app.approvalstatus = 0 THEN 'Subject for stock transfer approval'
+						WHEN ref.status = 0 THEN 'Subject for refurbish approval'
+						WHEN ref.status = 1 THEN 'On process refurbish'
+						WHEN sld.repo_id IS NOT NULL AND sld.status = 0 THEN 'Subject for selling approval'
+						WHEN sld.repo_id IS NOT NULL AND sld.status = 1 THEN 'Sold'
+						WHEN rud.status = '0' AND UPPER(rud.is_sold) = 'N' THEN 'Available'
+						ELSE '' END AS current_status"
+					),
+					DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
+					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
+					DB::raw("CONCAT(ISNULL(files.total_upload_required_files, 0),' / ', (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)) AS total_upload_files"),
+				)
+				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
+				->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
+				->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
+				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
+				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
+				->leftJoin(
+					DB::raw("(
+						SELECT
+							sub.approvalid, sub.recievedid, sta1.status AS approvalstatus,
+							CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END AS current_branch,
+							stu1.is_received AS isreceived, stu1.is_use_old_files, rud1.repo_id as repoid, sub.unitid
+						FROM (
+							SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
+							FROM stock_transfer_approval sta
+							INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
+							GROUP BY stu.recieved_unit_id
+						) sub
+						INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
+						INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
+						INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
+					) app"),
+					"rud.id",
+					"=",
+					"app.recievedid"
+				)
+				->leftJoin("sold_units as sld", function ($join) {
+					$join->on("rep.id", "=", "sld.repo_id");
+					$join->on("rep.branch_id", "=", "sld.branch");
+				})
+				->leftJoin("request_refurbishes as ref", function ($join) {
+					$join->on("rep.id", "=", "ref.repo_id");
+					$join->on("rep.branch_id", "=", "ref.branch");
+				})
+				->leftJoin(
+					DB::raw("(
+						SELECT
+							repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
+						FROM repo_details repo
+						LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
+						INNER JOIN (
+							SELECT * FROM files WHERE isRequired = 1 AND status = 1
+						) files ON upload.files_id = files.id
+						WHERE upload.is_deleted = 0
+						GROUP BY repo.id, upload.branch_id
+					) files"),
+					"files.repo_id",
+					"=",
+					"rep.id"
+				)
+				->where(function ($query) {
+					$query->whereNull('sld.repo_id')
+						->orWhere(DB::raw("sld.status"), '!=', '1');
+				});
+
+			if (Auth::user()->userrole == 'Warehouse Custodian') {
+				$data = $list_of_repos->where('rep.branch_id', '=', Auth::user()->branch)
+					->where(function ($query) {
+						$query->whereNull('app.current_branch')
+							->orWhere(DB::raw("CAST(app.current_branch AS INT)"), '=', DB::raw("CAST(rep.branch_id AS INT)"));
+					})
+					->get();
+			} else {
+				$data = $list_of_repos->get();
+			}
+
+			return $data;
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function repoDetailsPerId($id, $moduleid)
+	{
+		try {
+			$repo = DB::table('repo_details')->where('id', '=', $id)->first();
+			$customer = DB::table('customer_profile')->where('id', '=', $repo->customer_acumatica_id)->first();
+			$brand = DB::table('brands')->where('id', '=', $repo->brand_id)->first();
+			$model = DB::table('unit_models')->where('brand_id', '=', $repo->brand_id)->where('id', '=', $repo->model_id)->first();
+			$color = DB::table('unit_colors')->where('id', '=', $repo->color_id)->first();
+			$picture = DB::table('files_uploaded')->where('reference_id', '=', $repo->id)->where('module_id', '=', $moduleid)->where('is_deleted', '=', 0)->get();
+			$maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $repo->id)->where('branch', '=', $repo->branch_id)->max('id');
+			$received = DB::table('recieve_unit_details')->where('id', '=', $maxid)->first();
+			$parts = DB::table('recieve_unit_spare_parts as rsp')
+				->select('rsp.*', 'prt.name', DB::raw("CASE WHEN rsp.actual_price != 0 OR rsp.actual_price != null THEN rsp.actual_price ELSE rsp.price END AS latest_price"))
+				->leftJoin('spare_parts as prt', 'rsp.parts_id', '=', 'prt.id')
+				->where('rsp.recieve_id', '=', $maxid)->where('rsp.is_deleted', '=', 0)
+				->where(function ($query) {
+					$query->where('rsp.refurb_decision', '=', 'na')
+						->orWhereNull('rsp.refurb_decision');
+				})
+				->get();
+
+			$transfer = DB::table(function ($query) {
+				$query->select(
+					DB::raw('MAX(sta.id) AS approvalid'),
+					DB::raw('MAX(stu.recieved_unit_id) AS recievedid'),
+					DB::raw('MAX(stu.id) AS unitid')
+				)
+					->from('stock_transfer_approval as sta')
+					->join('stock_transfer_unit as stu', 'sta.id', '=', 'stu.stock_transfer_id')
+					->groupBy('stu.recieved_unit_id');
+			}, 'sub')
+				->select(
+					'sub.approvalid',
+					'sub.recievedid',
+					'sta1.status AS approvalstatus',
+					DB::raw('CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END AS current_branch'),
+					'stu1.is_received AS isreceived',
+					'stu1.is_use_old_files',
+					'rud1.repo_id as repoid',
+					'sub.unitid'
+				)
+				->join('stock_transfer_approval as sta1', 'sub.approvalid', '=', 'sta1.id')
+				->join('stock_transfer_unit as stu1', function ($join) {
+					$join->on('sub.unitid', '=', 'stu1.id')
+						->on('sub.approvalid', '=', 'stu1.stock_transfer_id')
+						->on('sub.recievedid', '=', 'stu1.recieved_unit_id');
+				})
+				->join('recieve_unit_details as rud1', 'sub.recievedid', '=', 'rud1.id')
+				->where('rud1.repo_id', '=', $repo->id)
+				->first();
+
+			if (strtolower(Auth::user()->userrole) == 'warehouse custodian' && $transfer == null) {
+				$disabled = true;
+			} else if (strtolower(Auth::user()->userrole) == 'warehouse custodian' && $transfer != null && $transfer->isreceived != "0") {
+				$disabled = false;
+			} else if (strtolower(Auth::user()->userrole) == 'verifier' && $transfer != null && $transfer->isreceived != "0") {
+				$disabled = false;
+			} else {
+				$disabled = false;
+			}
+
+			$data = [
+				'repo' => $repo,
+				'customer_details' => $customer,
+				'brand_details' => $brand,
+				'model_details' => $model,
+				'color_details' => $color,
+				'picture_details' => $picture,
+				'received_details' => $received,
+				'parts_details' => $parts,
+				'disabled' => $disabled,
+			];
+
+			return $data;
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function list_of_files()
+	{
+		try {
+			$statement = DB::table('files')->where('status', '=', '1');
+			$files = $statement->get();
+			$required = $statement->where('isRequired', '=', '1')->get();
+
+			$response = ['required' => $required, 'files' => $files];
+			return $response;
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function list_of_location()
+	{
+		try {
+			return DB::table('locations')->where('status', '=', '1')->get();
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function repoDeleteFiles($deleted_id)
+	{
+		try {
+			$filename = FilesUploaded::Where('id', $deleted_id)->first();
+			FilesUploaded::where('id', $filename->id)->update([
+				'is_deleted' => '1'
+			]);
+			return $filename->files_name;
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function updateRepo(Request $request, $id)
+	{
+		try{
+			$validator = Validator::make($request->all(), [
+				// 'repo_id' => 'required',
+				'customer_acumatica_id' => 'required',
+				'brand_id' => 'required',
+				'model_id' => 'required',
+				'plate_number' => 'required',
+				'model_engine' => 'required',
+				'model_chassis' => 'required',
+				'color_id' => 'required',
+				'mv_file_number' => 'nullable',
+				'classification' => 'required',
+				'year_model' => 'required',
+				'original_srp' => 'required',
+				'date_sold' => 'required',
+				'original_owner' => 'required',
+				'unit_loan_amount' => 'required',
+				'unit_total_payment' => 'required',
+				'unit_principal_balance' => 'required',
+				// 'msuisva_form_no' => 'required',
+				'date_surrender' => 'required',
+				'location' => 'required',
+				'certify_no_missing_and_damaged_parts' => 'required',
+				'append_count' => 'required',
+				'module_id' => 'required',
+				'loan_number' => 'required',
+				'odo_meter' => 'required',
+
+				'image_fetch_id_*' => 'nullable',
+				'image_*' => 'nullable',
+				'image_id_*' => 'nullable',
+				'image_name_*' => 'nullable',
+
+				'spare_parts_id_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_status_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_price_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_remarks_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_count' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+			]);
+
+			if ($validator->fails()) {
+				return $this->sendError('Validation Error.', $validator->errors());
+			}
+
+			$checker = 	DB::table('repo_details as rep')
+				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
+				->whereRaw('UPPER(rep.model_engine) = UPPER(?)', [$request->model_engine])
+				->whereRaw('UPPER(rep.model_chassis) = UPPER(?)', [$request->model_chassis])
+				->groupBy('rud.is_sold')
+				->select(DB::raw('count(rep.id) as isExist'), 'rud.is_sold')
+				->first();
+
+			// if (!empty($checker) && $checker->isExist > 0 && $checker->is_sold == 'N') {
+			// 	return $this->sendError([], 'The existing Unit is not been sold');
+			// }
+			// else {
+
+				$repo_format = [
+					'location' => $request->location,
+					'customer_acumatica_id' => $request->customer_acumatica_id,
+					'brand_id' => $request->brand_id,
+					'model_id' => $request->model_id,
+					'plate_number' => $request->plate_number,
+					'model_engine' => $request->model_engine,
+					'model_chassis' => $request->model_chassis,
+					'color_id' => $request->color_id,
+					'mv_file_number' => $request->mv_file_number,
+					'classification' => $request->classification,
+					'year_model' => $request->year_model,
+					'original_srp' => $request->original_srp,
+					'date_sold' => $request->date_sold,
+					'date_surrender' => $request->date_surrender,
+					// 'msuisva_form_no' => $request->msuisva_form_no,
+					'loan_number' => $request->loan_number,
+					'odo_meter' => $request->odo_meter,
+				];
+
+				DB::beginTransaction();
+
+				DB::table('repo_details')->where('id', $id)->update($repo_format);
+
+				$path = 'image/unit_received/' . strtoupper($request->model_engine . '-' . $request->model_chassis);
+				$directory = public_path($path);
+				if (!File::isDirectory($directory)) {
+					File::makeDirectory($directory, 0777, true, true);
+				}
+
+				$maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $id)->first();
+
+				for ($i = 1; $i <= $request->append_count; $i++) {
+					$image = $request->file("image_{$i}");
+					if ($image) {
+						$image_name = strtoupper(uniqid()) . '_' . strtolower(str_replace(' ', '_', str_replace('* ', '', $request->input("image_name_{$i}")))) . '.' . $image->getClientOriginalExtension();
+						$image->move($directory, $image_name);
+
+						$image_format = [
+							'reference_id' => $id,
+							'module_id' => $request->module_id,
+							'branch_id' => $maxid->branch,
+							'files_id' => $request->input("image_id_{$i}"),
+							'files_name' => str_replace('* ', '', $request->input("image_name_{$i}")),
+							'path' => $path . '/' . $image_name,
+						];
+
+						FilesUploaded::create($image_format);
+					}
+				}
+
+				$receive_format = [
+					'unit_price' => $request->original_srp,
+					'loan_amount' => $request->unit_loan_amount,
+					'total_payments' => $request->unit_total_payment,
+					'principal_balance' => $request->unit_principal_balance,
+					'is_certified_no_parts' => $request->certify_no_missing_and_damaged_parts,
+					'original_owner' => $request->original_owner,
+				];
+
+				DB::table('recieve_unit_details')->where('id', $maxid->id)->update($receive_format);
+
+				for ($i = 1; $i <= $request->spare_parts_count; $i++) {
+					if ($request->input("spare_parts_id_{$i}")) {
+						$spare_parts_format = [
+							'recieve_id' => $maxid->id,
+							'parts_id' => $request->input("spare_parts_id_{$i}"),
+							'parts_status' => $request->input("spare_parts_status_{$i}"),
+							'price' => $request->input("spare_parts_price_{$i}"),
+							'parts_remarks' => $request->input("spare_parts_remarks_{$i}")
+						];
+
+						if ($request->input("parts_unique_id_{$i}") == 0) {
+							unit_spare_parts::create($spare_parts_format);
+						} else {
+							unit_spare_parts::where('id', $request->input("parts_unique_id_{$i}"))->update($spare_parts_format);
+						}
+					}
+				}
+				DB::commit();
+			// }
+			return $this->sendResponse([], 'REPO Ddetails update successfully.');
+		}
+		catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function fetch_repo_approval($moduleid)
+	{
+		try {
+
+			$list_of_repos = DB::table('repo_details as rep')
+				->select(
+					'rep.*',
+					'bth.name AS branch_name',
+					'cus.acumatica_id',
+					DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
+					'brd.brandname',
+					'mdl.model_name',
+					'rep.model_engine',
+					'rep.model_chassis',
+					DB::raw("CASE
+						WHEN rud.status = '4' THEN 'Repo Tagging Approval'
+						WHEN rud.status = '0' AND UPPER(rud.is_sold) = 'N' THEN 'Subject for Reprice Approval'
+						WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'N' THEN 'For Sell'
+						WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'Y' THEN 'Sold'
+						WHEN rud.status = '2' THEN 'Disapproved'
+						ELSE ''
+					END AS current_status"),
+					DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
+					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
+				)
+				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
+				->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
+				->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
+				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
+				->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
+				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
+				->where('rud.status', '=', 4)->where('rud.approver', Auth::user()->id)->get();
+
+			$count = 0;
+			$get_approvers = approval_matrix_setting::where('module_id', '=', $moduleid)->get();
+			foreach ($get_approvers as $approvers) {
+				foreach ($approvers->signatories as $approver) {
+					if (Auth::user()->id == $approver['user']) {
+						$count++;
+					}
+				}
+			}
+
+			$role = '';
+			if ($count > 0) {
+				$role = 'Approver';
+			} else {
+				$role = 'Maker';
+			}
+			$data = ['data' => $list_of_repos, 'role' =>  $role];
+			return $data;
+		} catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+	}
+
+	public function repo_approver_decision(Request $request)
+	{
+
+		$repo = DB::table('repo_details')->where('id', '=', $request->recordid)->first();
+		$maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $repo->id)->where('branch', '=', $repo->branch_id)->max('id');
+		$received = DB::table('recieve_unit_details')->where('id', '=', $maxid)->first();
+
+		try {
+			$validator = Validator::make($request->all(), [
+				'moduleid' => 'required|numeric',
+				'recordid' => 'required|numeric',
+				'status' => 'required|numeric',
+				'loanAmount' => 'required',
+				'totalPayment' => 'required',
+				'principalBalance' => 'required',
+			]);
+
+			if ($validator->fails()) {
+				return $this->sendError('Validation Error.', $validator->errors());
+			}
+
+			// Get the next approver in approval matrix
+			$sequence = $this->approverDecision($request->moduleid, $received->id, Auth::user()->id);
+
+			DB::beginTransaction();
+
+			receive_unit::where('id', $received->id)
+				->update([
+					'loan_amount' => $request->loanAmount,
+					'total_payments' => $request->totalPayment,
+					'principal_balance' => $request->principalBalance,
+					'status' => $request->status,
+					'approver' => $sequence == 0 ? Auth::user()->id : $sequence,
+					'date_approved' => Carbon::now(),
+				]);
+
+			DB::commit();
+
+			$msg = $request->status == 0 ? 'Repo Tagging Successfully Approved!' : 'Repo Tagging Successfully disapproved!';
+			return $this->sendResponse([], $msg);
+		} catch (\Throwable $th) {
+			$this->rollBaclDecision($request->moduleid, $received->id, Auth::user()->id);
+			return $this->sendError($th->errorInfo[2]);
+		}
 	}
 }

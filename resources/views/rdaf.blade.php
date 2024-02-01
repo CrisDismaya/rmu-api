@@ -99,7 +99,11 @@
 </head>
 
 <body>
-
+    <?php
+        $dataExtract = $data['datas'];
+        $report_src = $data['report_src'];
+        $decodedData = json_decode($dataExtract);
+    ?>
 
 
     <div style="position: relative; margin: 0 auto; width: 100%; font-family: sans-serif">
@@ -118,19 +122,21 @@
                     </td>
                 </tr>
         </table>
+
+        @if($report_src != "inventory")
         <table>
             <tr>
                 <td class="td-class">
                     Branch
                 </td>
                 <td class="td-class">
-                   {{ $data[0]->branch}}
+                   {{ $decodedData[0]->branch}}
                 </td>
                 <td class="td-class">
                     Date
                 </td>
                 <td class="td-class">
-                DECEMBER 12, 2023
+                    {{ date('F j, Y') }}
                 </td>
             </tr>
             <tr>
@@ -138,13 +144,13 @@
                     Name of Buyer
                 </td>
                 <td class="td-class">
-                {{ $data[0]->customer}}
+                {{ $decodedData[0]->customer}}
                 </td>
                 <td class="td-class">
                     Primary ID
                 </td>
                 <td class="td-class">
-                    Driver's License
+                    {{ $decodedData[0]->primary_id }}
                 </td>
             </tr>
             <tr>
@@ -152,13 +158,13 @@
                     Address
                 </td>
                 <td class="td-class">
-                {{ $data[0]->address}}
+                {{ $decodedData[0]->address}}
                 </td>
                 <td class="td-class">
                     Alternative ID
                 </td>
                 <td class="td-class">
-                {{ $data[0]->alternative_id}}
+                {{ $decodedData[0]->alternative_id}}
                 </td>
             </tr>
             <tr>
@@ -166,13 +172,13 @@
                     Nationality
                 </td>
                 <td class="td-class">
-                {{ $data[0]->nationality}}
+                {{ $decodedData[0]->nationality}}
                 </td>
                 <td class="td-class">
                      ID No.
                 </td>
                 <td class="td-class">
-                {{ $data[0]->primary_id_no}}
+                {{ $decodedData[0]->primary_id_no}}
                 </td>
             </tr>
             <tr>
@@ -180,13 +186,13 @@
                     Source Of Income
                 </td>
                 <td class="td-class">
-                {{ $data[0]->source_of_income}}
+                {{ $decodedData[0]->source_of_income}}
                 </td>
                 <td class="td-class">
                      ID No.
                 </td>
                 <td class="td-class">
-                {{ $data[0]->alternative_id_no}}
+                {{ $decodedData[0]->alternative_id_no}}
                 </td>
             </tr>
 
@@ -195,7 +201,7 @@
                     Marital Status
                 </td>
                 <td class="td-class">
-                {{ $data[0]->marital_status}}
+                {{ $decodedData[0]->marital_status}}
                 </td>
                 <td class="td-class">
                     
@@ -209,7 +215,7 @@
                     Date Of Birth
                 </td>
                 <td class="td-class">
-                {{ $data[0]->date_birth}}
+                {{ $decodedData[0]->date_birth}}
                 </td>
                 <td class="td-class">
                     
@@ -223,7 +229,7 @@
                     Place Of Birth
                 </td>
                 <td class="td-class">
-                {{ $data[0]->birth_place}}
+                {{ $decodedData[0]->birth_place}}
                 </td>
                 <td class="td-class">
                     
@@ -233,7 +239,7 @@
                 </td>
             </tr>
         </table>
-        
+        @endif
             <br />
             <span><small>Motorcycle Details</small></span>
             <table >
@@ -252,25 +258,25 @@
                     <td class="td-class" style="width:8%">Total Payments</td>
                 </tr>
                 <tr id="tb2">
-                    <td class="td-class" style="width:8%">Loan No.</td>
-                    <td class="td-class" style="width:8%">Originating FinancingStore</td>
-                    <td class="td-class" style="width:8%">Date Released</td>
-                    <td class="td-class" style="width:8%">Date Repossessed</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->loan_number}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->financing_store}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->date_sold}}</td>date_sold
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->date_surrender}}</td>
                     <td class="td-class" style="width:8%">Aging Days</td>
-                    <td class="td-class" style="width:8%"> {{ $data[0]->customer}}</td>
-                    <td class="td-class" style="width:8%"> {{ $data[0]->brand}}  {{ $data[0]->model}}</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->srp}}</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->principal_balance}}</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->engine}}{{ $data[0]->chassis}}</td>
-                    <td class="td-class" style="width:8%">Odometer</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->total_payment}}</td>
+                    <td class="td-class" style="width:8%"> {{ $decodedData[0]->customer}}</td>
+                    <td class="td-class" style="width:8%"> {{ $decodedData[0]->brand}}  {{ $decodedData[0]->model}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->srp}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->principal_balance}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->engine}}{{ $decodedData[0]->chassis}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->odo_meter}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->total_payment}}</td>
                 </tr>
             </table>
             <br />
             <table >
                 <tr>
                     <td class="td-class" style="width:20%">Current ROPA Price</td>
-                    <td class="td-class" style="width:80%"><span style="color:red;">{{ $data[0]->srp}}</span></td>
+                    <td class="td-class" style="width:80%"><span style="color:red;">{{ $decodedData[0]->principal_balance}}</span></td>
                 </tr>
             </table>
         
@@ -288,13 +294,13 @@
                    
                 </tr>
                 <tr id="tb2">
-                    <td class="td-class" style="width:8%">{{ $data[0]->approved_price}}</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->rate}} %</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->rebate}}</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->monthly_amo}}</td>
-                    <td class="td-class" style="width:8%">{{ ($data[0]->monthly_amo - $data[0]->rebate) }}</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->dp}}</td>
-                    <td class="td-class" style="width:8%">{{ $data[0]->terms}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->approved_price}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->rate}} %</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->rebate}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->monthly_amo}}</td>
+                    <td class="td-class" style="width:8%">{{ ($decodedData[0]->monthly_amo - $decodedData[0]->rebate) }}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->dp}}</td>
+                    <td class="td-class" style="width:8%">{{ $decodedData[0]->terms}}</td>
                    
                 </tr>
             </table>
@@ -313,15 +319,15 @@
                 <tbody>
                     <tr>
                         <td >JOEMAR A. VALENCIA</td>
-                        <td >{{ $data[0]->date_approved}}</td>
-                        <td >{{ $data[0]->approved_price}}</td>
+                        <td >{{ $decodedData[0]->date_approved}}</td>
+                        <td >{{ $decodedData[0]->approved_price}}</td>
                         <td ></td>
                         
                     </tr>
                     <tr>
                         <td >RANDY C. TORRES</td>
-                        <td >{{ $data[0]->date_approved}}</td>
-                        <td >{{ $data[0]->approved_price}}</td>
+                        <td >{{ $decodedData[0]->date_approved}}</td>
+                        <td >{{ $decodedData[0]->approved_price}}</td>
                         <td ></td>
                       
                     </tr>

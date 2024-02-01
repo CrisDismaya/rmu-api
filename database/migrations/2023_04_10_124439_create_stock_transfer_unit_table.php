@@ -17,8 +17,8 @@ class CreateStockTransferUnitTable extends Migration
 			$table->bigInteger('id', true);
 			$table->integer('stock_transfer_id');
 			$table->integer('recieved_unit_id');
-			$table->enum('is_received', [ 0, 1, 2 ])->default(0);
-			$table->enum('is_use_old_files', [ 0, 1, 2 ])->default(0);
+			$table->enum('is_received', [ 0, 1, 2, 9 ])->default(0);
+			$table->enum('is_use_old_files', [ 0, 1, 2, 9 ])->default(0);
 			$table->timestamps();
 		});
 	}

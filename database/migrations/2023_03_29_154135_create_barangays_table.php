@@ -13,19 +13,12 @@ class CreateBarangaysTable extends Migration
      */
     public function up()
     {
-        Schema::create('barangays', function (Blueprint $table) {
+        Schema::create('barangay', function (Blueprint $table) {
             $table->bigInteger('id', true);
-            $table->string('code');
-            $table->string('name');
-            $table->string('oldName');
-            $table->string('subMunicipalityCode');
-            $table->string('cityCode');
-            $table->string('municipalityCode');
-            $table->string('districtCode');
-            $table->string('provinceCode');
-            $table->string('regionCode');
-            $table->string('islandGroupCode');
-            $table->string('psgc10DigitCode');
+            $table->string('MappingId')->nullable();
+            $table->string('Title')->nullable();
+            $table->string('ParentId')->nullable();
+            $table->string('OrderNumber')->nullable();
             $table->timestamps();
         });
     }
@@ -37,6 +30,6 @@ class CreateBarangaysTable extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('barangays');
+        Schema::dropIfExists('barangay');
     }
 }

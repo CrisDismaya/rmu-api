@@ -13,17 +13,12 @@ class CreateCitiesTable extends Migration
      */
     public function up()
     {
-        Schema::create('tbl_cities', function (Blueprint $table) {
+        Schema::create('city', function (Blueprint $table) {
             $table->bigInteger('id', true);
-            $table->string('code');
-            $table->string('name');
-            $table->string('oldName');
-            $table->string('isCapital');
-            $table->string('provinceCode');
-            $table->string('districtCode');
-            $table->string('regionCode');
-            $table->string('islandGroupCode');
-            $table->string('psgc10DigitCode');
+            $table->string('MappingId')->nullable();
+            $table->string('Title')->nullable();
+            $table->string('ParentId')->nullable();
+            $table->string('OrderNumber')->nullable();
             $table->timestamps();
         });
     }
@@ -35,6 +30,6 @@ class CreateCitiesTable extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('tbl_cities');
+        Schema::dropIfExists('city');
     }
 }

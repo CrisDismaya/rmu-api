@@ -11,6 +11,6 @@ class access_file extends Model
 
     protected $table = 'files';
 
-    protected $fillable = ['filename', 'status'];
+    protected $fillable = ['filename', 'isRequired', 'status'];
     
 }

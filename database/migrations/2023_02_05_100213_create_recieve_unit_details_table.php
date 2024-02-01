@@ -18,13 +18,16 @@ class CreateRecieveUnitDetailsTable extends Migration
             $table->integer('branch');
             $table->integer('repo_id');
             $table->double('unit_price');
-            $table->enum('status', [0, 1, 2])->default(0);
+            $table->enum('status', [0, 1, 2, 4])->default(4);
             $table->enum('is_sold', ['Y','N'])->default('N');
             $table->enum('sold_type',['I','C'])->nullable();
             $table->string('loan_amount')->nullable();
             $table->string('total_payments')->nullable();
             $table->string('principal_balance')->nullable();
             $table->string('is_certified_no_parts')->nullable();
+            $table->string('original_owner');
+            $table->integer('approver')->nullable();
+            $table->datetime('date_approved')->nullable();
             $table->timestamps();
         });
     }

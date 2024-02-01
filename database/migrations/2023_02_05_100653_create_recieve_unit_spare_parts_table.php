@@ -22,6 +22,8 @@ class CreateRecieveUnitSparePartsTable extends Migration
             $table->double('price');
             $table->string('parts_remarks')->nullable();
 			$table->enum('is_deleted', [0, 1])->default(0);
+            $table->decimal('actual_price', 10, 2)->nullable();
+            $table->string('refurb_decision')->nullable();
             $table->timestamps();
         });
     }

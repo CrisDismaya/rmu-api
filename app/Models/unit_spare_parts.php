@@ -18,6 +18,8 @@ class unit_spare_parts extends Model
         'price',
         'parts_remarks',
         // 'is_deleted'
+        'actual_price',
+        'refurb_decision',
     ];
 
     function spare_parts_details(){

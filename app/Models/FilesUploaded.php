@@ -11,5 +11,5 @@ class FilesUploaded extends Model
 
     protected $table = 'files_uploaded';
 
-    protected $fillable = ['reference_id', 'module_id', 'files_id', 'files_name', 'path'];
+    protected $fillable = ['reference_id', 'module_id', 'branch_id', 'files_id', 'files_name', 'path'];
 }

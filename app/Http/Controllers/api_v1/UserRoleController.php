@@ -13,51 +13,72 @@ use App\Models\user_role;
 class UserRoleController extends BaseController
 {
     //
-    public function createUserRole(Request $request){
-		$validator = Validator::make($request->all(), [
-			'user_role_name' => 'required'
-		]);
-	
-		if ($validator->fails()) {
-			return $this->sendError('Validation Error.', $validator->errors()); 
-		}
+    public function createUserRole(Request $request)
+    {
 
-        $format = [
-            'user_role_name' => $request->user_role_name
-        ];
+        try {
 
-        $check = user_role::where('user_role_name', $request->user_role_name)->count();
+            $validator = Validator::make($request->all(), [
+                'user_role_name' => 'required'
+            ]);
 
-        if($check > 0){
-            return $this->sendError('Validation Error.', 'Color already added!');
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $format = [
+                'user_role_name' => $request->user_role_name
+            ];
+
+            $check = user_role::where('user_role_name', $request->user_role_name)->count();
+
+            if ($check > 0) {
+                return $this->sendError('Validation Error.', 'Color already added!');
+            }
+
+            user_role::create($format);
+            return $this->sendResponse([], 'Color added successfully.');
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
         }
-
-		user_role::create($format);
-        return $this->sendResponse([], 'Color added successfully.');
-	}
-
-    public function userRole(){
-        return  DB::table('user_role')
-        ->select('id', 'user_role_name', DB::raw("CASE WHEN role_status = '0' THEN 'Inactive' ELSE 'Active' END AS role_status"))
-        ->get();
     }
 
-    public function updateUserRole(Request $request, $id){
-        $validator = Validator::make($request->all(), [
-            'user_role_name' => 'required',
-            'role_status' => 'required',
-        ]);
-   
-        if($validator->fails()){
-            return $this->sendError('Validation Error.', $validator->errors());       
+    public function userRole()
+    {
+
+        try {
+
+            return  DB::table('user_role')
+                ->select('id', 'user_role_name', DB::raw("CASE WHEN role_status = '0' THEN 'Inactive' ELSE 'Active' END AS role_status"))
+                ->get();
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
         }
+    }
 
-        $format = [
-            'user_role_name' => $request->user_role_name,
-            'role_status' => $request->role_status,
-        ];
+    public function updateUserRole(Request $request, $id)
+    {
 
-        user_role::where('id', $id)->update($format);
-        return $this->sendResponse([], 'User Role updated successfully.');
+        try {
+
+            $validator = Validator::make($request->all(), [
+                'user_role_name' => 'required',
+                'role_status' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $format = [
+                'user_role_name' => $request->user_role_name,
+                'role_status' => $request->role_status,
+            ];
+
+            user_role::where('id', $id)->update($format);
+            return $this->sendResponse([], 'User Role updated successfully.');
+        } catch (\Throwable $th) {
+            return $this->sendError($th->errorInfo[2]);
+        }
     }
 }

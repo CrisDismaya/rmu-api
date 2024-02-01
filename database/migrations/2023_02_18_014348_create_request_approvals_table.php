@@ -28,6 +28,7 @@ class CreateRequestApprovalsTable extends Migration
             $table->BigInteger('approver')->nullable();
             $table->date('date_approved')->nullable();
             $table->string('remarks')->nullable();
+            $table->enum('status', [0, 1, 2])->default(0);
             $table->BigInteger('created_by');
             $table->timestamps();
         });

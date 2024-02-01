@@ -13,30 +13,50 @@ use App\Models\access_file;
 
 class AccessFileController extends BaseController
 {
-    //
-    public function createFileUpload(Request $request){
+	//
+	public function createFileUpload(Request $request)
+	{
 		$validator = Validator::make($request->all(), [
 			'filename' => 'required',
+			'isRequired' => 'required',
 		]);
-	
+
 		if ($validator->fails()) {
-			return $this->sendError('Validation Error.', $validator->errors()); 
+			return $this->sendError('Validation Error.', $validator->errors());
 		}
 
 		$format = [
 			'filename' => $request->filename,
+			'isRequired' => $request->isRequired
 		];
 
 		access_file::create($format);
-    	
+
 		return $this->sendResponse([], 'Filename added successfully.');
 	}
 
-    public function files(){
-		$files = DB::table('files')
-			->where('status', '=', '1')
-			->get();
+	public function files()
+	{
+		$files = DB::table('files')->get();
 
 		return $files;
+	}
+
+	public function updateFileUpload(Request $request, $id)
+	{
+		$validator = Validator::make($request->all(), [
+			'filename' => 'required',
+			'isRequired' => 'required',
+			'status' => 'required',
+		]);
+
+		if ($validator->fails()) {
+			return $this->sendError('Validation Error.', $validator->errors());
+		}
+
+		access_file::where('id', $id)->update($request->all());
+		return $this->sendResponse([], 'Location updated successfully.');
+
+		return $this->sendResponse([], 'Filename added successfully.');
 	}
 }
