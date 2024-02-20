@@ -9,7 +9,6 @@ These instructions will help you set up and run the project locally on your mach
 
 ### Build with
 [![Php][Php]][Php-url] 
-[![Composer][Composer]][Composer-url] 
 [![Laravel][Laravel]][Laravel-url] 
 
 ### Installation
@@ -31,9 +30,6 @@ These instructions will help you set up and run the project locally on your mach
 <!-- MARKDOWN LINKS & IMAGES -->
 [Php]: https://img.shields.io/badge/PHP-777BB4?style=for-the-badge&logo=php&logoColor=white
 [Php-url]: https://www.php.net/
-
-[Composer]: https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black
-[Composer-url]: https://getcomposer.org/
 
 [JavaScript]: https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black
 [JavaScript-url]: https://www.javascript.com/
