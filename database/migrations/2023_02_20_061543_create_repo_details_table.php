@@ -34,6 +34,9 @@ class CreateRepoDetailsTable extends Migration
             $table->string('msuisva_form_no')->nullable();
             $table->string('loan_number');
             $table->string('odo_meter');
+            $table->string('unit_description');
+            $table->string('unit_documents');
+            $table->date('last_payment')->nullable();
             $table->timestamps();
         });
     }

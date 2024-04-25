@@ -59,14 +59,14 @@ class RequestApprovalController extends BaseController
                 ->join('unit_colors as color', 'repo.color_id', 'color.id')
                 ->leftJoin(
                     DB::raw("(
-                        SELECT 
+                        SELECT
                             repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
                         FROM repo_details repo
                         LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
                         INNER JOIN (
                             SELECT * FROM files WHERE isRequired = 1 AND status = 1
-                        ) files ON upload.files_id = files.id 
-                        WHERE upload.is_deleted = 0 
+                        ) files ON upload.files_id = files.id
+                        WHERE upload.is_deleted = 0
                         GROUP BY repo.id, upload.branch_id
                     ) files"),
                     "files.repo_id",
@@ -347,10 +347,10 @@ class RequestApprovalController extends BaseController
 
             if (Auth::user()->userrole == 'Warehouse Custodian') {
                 $condition = " WHERE received.is_sold = 'N' AND received.status != 4 AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
-                    and not exists  (select repo_id from sold_units where repo_id = repo.id 
+                    and not exists  (select repo_id from sold_units where repo_id = repo.id
                     AND branch ='" . Auth::user()->branch . "')
                     and not exists  (select repo_id from request_refurbishes where repo_id = repo.id and status in (0,1,3)
-                    AND branch ='" . Auth::user()->branch . "') 
+                    AND branch ='" . Auth::user()->branch . "')
                     AND not exists (Select c.repo_id from stock_transfer_approval as a
                     inner join stock_transfer_unit as b on b.stock_transfer_id = a.id
                     inner join recieve_unit_details as c on c.id = b.recieved_unit_id
@@ -359,7 +359,7 @@ class RequestApprovalController extends BaseController
             } else {
                 $condition = " WHERE received.is_sold = 'N' AND received.status != 4 AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
                 and not exists  (select repo_id from sold_units where repo_id = repo.id)
-                and not exists  (select repo_id from request_refurbishes where repo_id = repo.id and status in (0,1,3)) 
+                and not exists  (select repo_id from request_refurbishes where repo_id = repo.id and status in (0,1,3))
                 AND not exists (Select c.repo_id from stock_transfer_approval as a
                 inner join stock_transfer_unit as b on b.stock_transfer_id = a.id
                 inner join recieve_unit_details as c on c.id = b.recieved_unit_id
@@ -389,14 +389,14 @@ class RequestApprovalController extends BaseController
             inner join unit_colors as color on color.id = repo.color_id
             inner join customer_profile as old_owner on old_owner.id = repo.customer_acumatica_id
             left join (
-                SELECT 
+                SELECT
                     repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
                 FROM repo_details repo
                 LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
                 INNER JOIN (
                     SELECT * FROM files WHERE isRequired = 1 AND status = 1
-                ) files ON upload.files_id = files.id 
-                WHERE upload.is_deleted = 0 
+                ) files ON upload.files_id = files.id
+                WHERE upload.is_deleted = 0
                 GROUP BY repo.id, upload.branch_id
             ) files ON repo.id = files.repo_id
             " . $condition
@@ -427,6 +427,17 @@ class RequestApprovalController extends BaseController
                     CONCAT(old_owner.firstname, ' ', old_owner.middlename, ' ', old_owner.lastname) AS ex_owner,
                     old_owner.firstname AS o_firstname, old_owner.middlename AS o_middlename, old_owner.lastname AS o_lastname,
                     repo.created_at AS date_received, received.principal_balance AS original_srp,
+                    DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month,
+                    CASE
+                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .05))
+                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .10))
+                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .15))
+                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .20))
+                    ELSE 0 END AS standard_matrix_value,
                     CASE
                         WHEN req.approved_price IS NULL THEN received.principal_balance
                         ELSE req.approved_price
@@ -452,6 +463,13 @@ class RequestApprovalController extends BaseController
                 --    GROUP BY model_chassis, model_engine
                 --) AS latest ON latest.id = repo.id
                 INNER JOIN recieve_unit_details AS received ON received.repo_id = repo.id
+                LEFT JOIN (
+                    SELECT rud.repo_id, SUM(price) total_parts_price
+                    FROM recieve_unit_details rud
+                    LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
+                    WHERE rud.repo_id = 1 and rus.is_deleted = 0
+                    GROUP BY rud.repo_id
+                ) AS total_parts ON total_parts.repo_id = repo.id
                 LEFT JOIN (
                     SELECT a.repo_id, a.approved_price
                     FROM request_approvals AS a
@@ -488,12 +506,12 @@ class RequestApprovalController extends BaseController
                 LEFT JOIN (
                     SELECT repo_id, status
                     FROM request_refurbishes
-                  
+
                 ) AS refurbish ON refurbish.repo_id = repo.id
                 LEFT JOIN (
-                    SELECT 
+                    SELECT
                         sub.approvalid, sub.recievedid, sta1.status AS approvalstatus,
-                        CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END AS current_branch, 
+                        CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END AS current_branch,
                         stu1.is_received AS isreceived, stu1.is_use_old_files, rud1.repo_id as repoid, sub.unitid
                     FROM (
                         SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
@@ -507,7 +525,7 @@ class RequestApprovalController extends BaseController
                 ) AS [transfer] ON repo.id = [transfer].repoid
                 WHERE received.is_sold = 'N' AND received.status != 4 AND repo.branch_id = ISNULL([transfer].current_branch, repo.branch_id)
                 AND (
-                    (@role = 'Warehouse Custodian' AND repo.branch_id = @branchid) OR 
+                    (@role = 'Warehouse Custodian' AND repo.branch_id = @branchid) OR
                     (@role != 'Warehouse Custodian')
                 )",
                 ['userrole' => Auth::user()->userrole, 'branchid' => Auth::user()->branch]
@@ -559,7 +577,7 @@ class RequestApprovalController extends BaseController
 
 
             $received_units = DB::select(
-                "SELECT 
+                "SELECT
             repo.model_engine, repo.model_chassis,repo.branch_id
             ,branches.name as branchname,brands.brandname,model.model_name,color.name as color,
             history.old_price, history.appraised_price,history.date_approved,history.remarks,
@@ -767,7 +785,7 @@ class RequestApprovalController extends BaseController
                 'date_approved' => $request->status == 1 ? Carbon::now() : null,
                 'remarks' => $request->remarks
             ];
-            
+
             if ($request->edit_price) {
                 $arr['approved_price'] = $request->approved_price;
                 $arr['edited_price'] = $data->approved_price;
@@ -859,7 +877,7 @@ class RequestApprovalController extends BaseController
                 $create->maker = Auth::user()->id;
                 $create->approver = '';
                 $create->remarks = '';
-                
+
                 receive_unit::where('repo_id', $input['repo_id'])->update(['sold_type' => $input['sold_type'] ]);
 
                 //check for RNR uploading
@@ -951,7 +969,7 @@ class RequestApprovalController extends BaseController
                 'approver' => $first_approver > 0 ? $first_approver : ($sequence == 0 ? Auth::user()->id : $sequence),
                 'remarks' => $request->remarks
             ]);
-            
+
             DB::commit();
 
             $msg = $request->status == 1 ? 'Request for approval successfully approved!' : 'Request for approval successfully disapproved!';

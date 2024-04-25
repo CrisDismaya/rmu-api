@@ -53,9 +53,10 @@ class ReportController extends BaseController
 							FORMAT(rep.date_sold, 'MMM dd, yyyy') AS date_granted,
 							bb.total_payments AS total_payment,
 							'' AS date_due,
+                            rep.original_srp,
 							-- (rep.original_srp - bb.total_payments) AS principal_balance,
 							bb.principal_balance AS principal_balance,
-							'' AS late_date_of_payment,
+							FORMAT(rep.last_payment, 'MMM dd, yyyy') AS late_date_of_payment,
 							FORMAT(rep.date_surrender, 'MMM dd, yyyy') AS repo_date,
 							brd.brandname AS brand,
 							mdl.model_name AS model,
@@ -66,8 +67,9 @@ class ReportController extends BaseController
 							UPPER(rep.plate_number) AS plate_no,
 							'' AS br_or_arv_no,
 							UPPER(rep.classification) AS [classification],
-							'' AS classification_document_tag,
-							'' AS classification_description
+							UPPER(rep.unit_documents) AS classification_document_tag,
+							UPPER(rep.unit_description) AS classification_description,
+                            DATEDIFF(MONTH, (CONVERT(DATE, rep.date_sold)), rep.date_surrender) AS standard_matrix_month
 						FROM repo_details rep
 						LEFT JOIN branches brh ON rep.branch_id = brh.id
 						inner join recieve_unit_details as bb on bb.repo_id = rep.id

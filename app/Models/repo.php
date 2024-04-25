@@ -31,25 +31,28 @@ class repo extends Model
         'date_sold',
         'msuisva_form_no',
         'loan_number',
-        'odo_meter'
+        'odo_meter',
+        'unit_description',
+        'unit_documents',
+        'last_payment',
     ];
 
     function branch_details(){
         return $this->hasOne(branch::class, 'id', 'branch_id');
     }
-    
+
     function customer_details(){
         return $this->hasOne(customer_profiling::class, 'acumatica_id', 'customer_acumatica_id');
     }
-    
+
     function brand_details(){
         return $this->hasOne(brand::class, 'id', 'brand_id');
     }
-    
+
     function model_details(){
         return $this->hasOne(unit_model::class, 'id', 'model_id');
     }
-    
+
     function color_details(){
         return $this->hasOne(unit_color::class, 'id', 'color_id');
     }

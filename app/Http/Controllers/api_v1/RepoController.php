@@ -52,6 +52,9 @@ class RepoController extends BaseController
 				'module_id' => 'required',
 				'loan_number' => 'required',
 				'odo_meter' => 'required',
+				'unit_description' => 'required',
+				'unit_documents' => 'required',
+				'last_payment' => 'nullable',
 
 				'image_fetch_id_*' => 'nullable',
 				'image_*' => 'nullable',
@@ -100,6 +103,9 @@ class RepoController extends BaseController
 					// 'msuisva_form_no' => $request->msuisva_form_no,
 					'loan_number' => $request->loan_number,
 					'odo_meter' => $request->odo_meter,
+					'unit_description' => $request->unit_description,
+					'unit_documents' => $request->unit_documents,
+                    'last_payment' => $request->last_payment,
 				];
 
 				DB::beginTransaction();
@@ -422,6 +428,9 @@ class RepoController extends BaseController
 				'module_id' => 'required',
 				'loan_number' => 'required',
 				'odo_meter' => 'required',
+				'unit_description' => 'required',
+				'unit_documents' => 'required',
+                'last_payment' => 'nullable',
 
 				'image_fetch_id_*' => 'nullable',
 				'image_*' => 'nullable',
@@ -470,6 +479,9 @@ class RepoController extends BaseController
 					// 'msuisva_form_no' => $request->msuisva_form_no,
 					'loan_number' => $request->loan_number,
 					'odo_meter' => $request->odo_meter,
+					'unit_description' => $request->unit_description,
+					'unit_documents' => $request->unit_documents,
+                    'last_payment' => $request->last_payment,
 				];
 
 				DB::beginTransaction();
