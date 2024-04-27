@@ -69,9 +69,37 @@ class RequestApprovalController extends BaseController
                         WHERE upload.is_deleted = 0
                         GROUP BY repo.id, upload.branch_id
                     ) files"),
-                    "files.repo_id",
-                    "=",
-                    "repo.id"
+                    "files.repo_id", "=", "repo.id"
+                )
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT MAX(id) as latest_id, branch, repo_id, approved_price
+                        FROM request_approvals
+                        WHERE status = 1
+                        GROUP BY branch, repo_id, approved_price
+                    ) appraise"), function ($join) {
+                        $join->on('appraise.repo_id', '=', 'repo.id')
+                            ->on('appraise.branch', '=', 'repo.branch_id');
+                    }
+                )
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT rud.repo_id, SUM(price) total_parts_price
+                        FROM recieve_unit_details rud
+                        LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
+                        WHERE rus.is_deleted = 0 and (rus.refurb_decision IS NULL OR rus.refurb_decision = 'na')
+                        GROUP BY rud.repo_id
+                    ) total_parts"),
+                    "total_parts.repo_id", "=", "repo.id"
+                )
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT recieve_id, SUM(actual_price) AS total_cost_parts
+                        FROM recieve_unit_spare_parts
+                        WHERE is_deleted = 0 and refurb_decision = 'done'
+                        GROUP BY recieve_id
+                    ) parts"),
+                    "rud.id", "=", "parts.recieve_id"
                 )
                 ->select(
                     'rud.*',
@@ -82,7 +110,27 @@ class RequestApprovalController extends BaseController
                     'br.name as branchname',
                     'brd.brandname',
                     'mdl.model_name',
-                    'color.name as color'
+                    'color.name as color',
+                    DB::raw('DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month'),
+                    DB::raw('
+                        CASE
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .05)
+
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .10)
+
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .15)
+
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .20)
+                        ELSE 0 END AS standard_matrix_value
+                    ')
                 )
                 ->where('rud.is_sold', 'N')
                 ->where('rud.status', '!=', '4')
@@ -140,6 +188,30 @@ class RequestApprovalController extends BaseController
                 })
                 ->join('users as holder', 'req_app.approver', 'holder.id')
                 ->join('users as maker', 'req_app.created_by', 'maker.id')
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT
+                            repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
+                        FROM repo_details repo
+                        LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
+                        INNER JOIN (
+                            SELECT * FROM files WHERE isRequired = 1 AND status = 1
+                        ) files ON upload.files_id = files.id
+                        WHERE upload.is_deleted = 0
+                        GROUP BY repo.id, upload.branch_id
+                    ) files"),
+                    "files.repo_id", "=", "repo.id"
+                )
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT rud.repo_id, SUM(price) total_parts_price
+                        FROM recieve_unit_details rud
+                        LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
+                        WHERE rud.repo_id = 1 and rus.is_deleted = 0
+                        GROUP BY rud.repo_id
+                    ) total_parts"),
+                    "total_parts.repo_id", "=", "repo.id"
+                )
                 ->select(
                     'rud.*',
                     'repo.model_engine',
@@ -157,7 +229,21 @@ class RequestApprovalController extends BaseController
                     DB::raw('CONCAT(holder.firstname,holder.middlename,holder.lastname) as current_holder'),
                     DB::raw('CONCAT(maker.firstname,maker.middlename,maker.lastname) as requestor'),
                     'color.name as color',
-                    'rud.principal_balance'
+                    'rud.principal_balance',
+
+                    DB::raw('DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month'),
+                    DB::raw('
+                        CASE
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .05))
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .10))
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .15))
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .20))
+                        ELSE 0 END AS standard_matrix_value
+                    ')
                 );
 
             $count = 0;
@@ -430,13 +516,20 @@ class RequestApprovalController extends BaseController
                     DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month,
                     CASE
                         WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
-                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .05))
+                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .05)
+
                         WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
-                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .10))
+                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .10)
+
                         WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
-                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .15))
+                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .15)
+
                         WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
-                            THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .20))
+                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
+                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .20)
                     ELSE 0 END AS standard_matrix_value,
                     CASE
                         WHEN req.approved_price IS NULL THEN received.principal_balance
@@ -467,7 +560,7 @@ class RequestApprovalController extends BaseController
                     SELECT rud.repo_id, SUM(price) total_parts_price
                     FROM recieve_unit_details rud
                     LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
-                    WHERE rud.repo_id = 1 and rus.is_deleted = 0
+                    WHERE rus.is_deleted = 0 and (rus.refurb_decision IS NULL OR rus.refurb_decision = 'na')
                     GROUP BY rud.repo_id
                 ) AS total_parts ON total_parts.repo_id = repo.id
                 LEFT JOIN (
@@ -523,6 +616,18 @@ class RequestApprovalController extends BaseController
                     INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
                     INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
                 ) AS [transfer] ON repo.id = [transfer].repoid
+                LEFT JOIN (
+                    SELECT MAX(id) as latest_id, branch, repo_id, approved_price
+                    FROM request_approvals
+                    WHERE status = 1
+                    GROUP BY branch, repo_id, approved_price
+                ) appraise ON repo.id = appraise.repo_id and repo.branch_id = appraise.branch
+                LEFT JOIN (
+                    SELECT recieve_id, SUM(actual_price) AS total_cost_parts
+                    FROM recieve_unit_spare_parts
+                    WHERE is_deleted = 0 and refurb_decision = 'done'
+                    GROUP BY recieve_id
+                ) parts ON received.id = parts.recieve_id
                 WHERE received.is_sold = 'N' AND received.status != 4 AND repo.branch_id = ISNULL([transfer].current_branch, repo.branch_id)
                 AND (
                     (@role = 'Warehouse Custodian' AND repo.branch_id = @branchid) OR
@@ -768,7 +873,7 @@ class RequestApprovalController extends BaseController
                     $appraisal_log->approver = Auth::user()->id;
                     $appraisal_log->save();
 
-                    receive_unit::where('id', $request->data_id)->update(['principal_balance' => $data->approved_price]);
+                    // receive_unit::where('id', $request->data_id)->update(['principal_balance' => $data->approved_price]);
                     receive_unit::where('id', $request->data_id)->update(['status' => $request->status]);
                     RequestApproval::where('id', $data->id)->update(['status' => $request->status]);
                 }

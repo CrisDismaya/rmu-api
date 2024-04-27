@@ -58,7 +58,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			//Dashboard
 			Route::get('sidebarNotif', [DashboardController::class, 'dashboardCounter']);
 			Route::get('getSidebarNotif', [DashboardController::class, 'getSidebarNotif']);
-			
+
 			//user
 			Route::get('userroles', [UserController::class, 'getRoles']);
 			Route::post('register', [UserController::class, 'register']);
@@ -70,7 +70,6 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('getMyModules', [UserController::class, 'getAllModules']);
 			Route::get('approverByPage/{moduleid}', [UserController::class, 'approverByPage']);
 			Route::get('getAllNotification', [UserController::class, 'getAllNotification']);
-
 
 			Route::post('changePassword', [UserController::class, 'changePassword']);
 			Route::get('deactivateUser/{id}/{status}', [UserController::class, 'deactivateUser']);
@@ -84,7 +83,6 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::post('createColor', [ColorController::class, 'createColor']);
 			Route::get('colors', [ColorController::class, 'colors']);
 			Route::post('updateColor/{id}', [ColorController::class, 'updateColor']);
-			
 
 			//model
 			Route::post('createModel', [ModelController::class, 'createModel']);
@@ -100,7 +98,6 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('partsPerModel', [PartsController::class, 'partsPerModel']);
 			Route::get('partsPrice/{parts_id}', [PartsController::class, 'partsPrice']);
 			Route::get('deactivateParts/{id}/{status}', [PartsController::class, 'deactivateParts']);
-			
 
 			//parts
 			Route::post('mapAging', [AgingController::class, 'mapAging']);
@@ -116,7 +113,6 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::post('updateLocation/{id}', [BranchController::class, 'updateLocation']);
 			Route::get('locationList', [BranchController::class, 'locationList']);
 			Route::get('deactivateLocation/{id}/{status}', [BranchController::class, 'deactivateLocation']);
-			
 
 			//customer profile
 			Route::post('createCustomerProfile', [CustomerProfileController::class, 'createCustomerProfile']);
@@ -129,7 +125,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('brgyList/{cityId}', [CustomerProfileController::class, 'brgyList']);
 			Route::get('customer/source_of_income', [CustomerProfileController::class, 'source_of_income']);
 			Route::get('customer/nationality', [CustomerProfileController::class, 'nationality']);
-			
+
 			//repo details
 			Route::post('createRepo', [RepoController::class, 'createRepo']);
 			Route::get('repo', [RepoController::class, 'repo']);
@@ -140,7 +136,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::post('updateRepo/{id}', [RepoController::class, 'updateRepo']);
 			Route::get('fetch_repo_approval/{moduleid}', [RepoController::class, 'fetch_repo_approval']);
 			Route::post('repo_approver_decision', [RepoController::class, 'repo_approver_decision']);
-			
+
 			//receive unit
 			Route::post('createReceiveUnit', [ReceiveUnitController::class, 'createReceiveUnit']);
 			Route::get('receivedUnits', [ReceiveUnitController::class, 'receivedUnits']);
@@ -156,13 +152,13 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('listReceivedUnit', [RequestApprovalController::class, 'listReceivedUnit']);
 			Route::get('appraisalActivityLog/{requestid}', [RequestApprovalController::class, 'appraisalActivityLog']);
 			Route::get('appraisalHistory', [RequestApprovalController::class, 'appraisalHistory']);
+
 			//inventory
 			Route::get('InventoryMasterList', [RequestApprovalController::class, 'UnitInventoryMasterList']);
 			Route::get('SoldMasterList', [RequestApprovalController::class, 'SoldUnitMasterList']);
 			Route::get('appraisedUnitList', [RequestApprovalController::class, 'appraisedUnitList']);
 			Route::get('getListForApproval/{moduleid}', [RequestApprovalController::class, 'getListForApproval']);
 			Route::get('UnitHistory/{engine}/{chassis}', [RequestApprovalController::class, 'UnitHistory']);
-			
 
 			//Refurbish
 			Route::get('refurbishUnitList', [RequestRefurbishController::class, 'refurbishUnitList']);
@@ -181,8 +177,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('getUploadedDocuments/{refurbish_id}', [RequestRefurbishController::class, 'getUploadedDocuments']);
 			Route::post('refurbishDecision', [RequestRefurbishController::class, 'refurbishDecision']);
 			Route::post('refurbishProcessDecision', [RequestRefurbishController::class, 'refurbishProcessDecision']);
-			
-			
+
 			// stock transfer
 			Route::get('modelList', [StockTransferContoller::class, 'ModelList']);
 			Route::get('branchesList', [StockTransferContoller::class, 'branchesList']);
@@ -198,7 +193,6 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('getTransferredUnits', [StockTransferContoller::class, 'getTransferredUnits']);
 			Route::get('getComparisionSpareParts', [StockTransferContoller::class, 'getComparisionSpareParts']);
 			Route::get('fetch_stock_transfer_approved', [StockTransferContoller::class, 'fetch_stock_transfer_approved']);
-			
 
 			//tag unit
 			Route::get('listForSalesTagging', [RequestApprovalController::class, 'listForSalesTagging']);
@@ -207,19 +201,19 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::post('updateSaleTagging', [RequestApprovalController::class, 'updateSaleTagging']);
 			Route::post('cancelSalesTag', [RequestApprovalController::class, 'cancelSalesTag']);
 			Route::get('agentList', [RequestApprovalController::class, 'agentList']);
-			
+
 			// user role
 			Route::get('userRole', [UserRoleController::class, 'userRole']);
 			Route::post('createUserRole', [UserRoleController::class, 'createUserRole']);
 			Route::post('updateUserRole/{id}', [UserRoleController::class, 'updateUserRole']);
-			
+
 			// system_menu
 			Route::get('menu', [SystemMenuController::class, 'menu']);
 			Route::get('menuList/{user_role_id}', [SystemMenuController::class, 'menuList']);
 			Route::post('createSystemMenu', [SystemMenuController::class, 'createSystemMenu']);
 			Route::post('createMenuMapping', [SystemMenuController::class, 'createMenuMapping']);
 			Route::post('updateSystemMenu/{id}', [SystemMenuController::class, 'updateSystemMenu']);
-			
+
 			// filename
 			Route::get('files', [AccessFileController::class, 'files']);
 			Route::post('createFileUpload', [AccessFileController::class, 'createFileUpload']);

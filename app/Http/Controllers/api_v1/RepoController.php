@@ -200,17 +200,18 @@ class RepoController extends BaseController
 					'rep.model_chassis',
 					DB::raw(
 						"CASE
-						WHEN rud.status = '4' THEN 'Repo Tagging Approval'
-						WHEN app.approvalstatus = 0 THEN 'Subject for stock transfer approval'
-						WHEN ref.status = 0 THEN 'Subject for refurbish approval'
-						WHEN ref.status = 1 THEN 'On process refurbish'
-						WHEN sld.repo_id IS NOT NULL AND sld.status = 0 THEN 'Subject for selling approval'
-						WHEN sld.repo_id IS NOT NULL AND sld.status = 1 THEN 'Sold'
-						WHEN rud.status = '0' AND UPPER(rud.is_sold) = 'N' THEN 'Available'
-						ELSE '' END AS current_status"
+                            WHEN rud.status = 4 THEN 'Repo Tagging Approval'
+                            WHEN transfer.status = 0 THEN 'Subject for stock transfer approval'
+                            WHEN appraisal.status = 0 THEN 'Subject for Appraisal'
+                            WHEN re_refurb.status = 0 THEN 'Subject for refurbish approval'
+                            WHEN re_refurb.status = 1 THEN 'On process for refurbish'
+                            WHEN re_refurb.status = 3 AND se_refurb.status IS NULL THEN 'Subject for settle refurbish'
+                            WHEN re_refurb.status = 3 AND se_refurb.status = 0 THEN 'On process for settle refurbish'
+                            WHEN sld.repo_id IS NOT NULL AND sld.status = 0 THEN 'Subject for selling approval'
+                            WHEN sld.repo_id IS NOT NULL AND sld.status = 1 THEN 'Sold'
+                            WHEN (rud.status = 0 AND UPPER(rud.is_sold) = 'N') OR appraisal.status = 1 OR (re_refurb.status = 4 AND se_refurb.status = 1) THEN 'Available'
+                        ELSE '' END AS current_status"
 					),
-					DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
-					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
 					DB::raw("CONCAT(ISNULL(files.total_upload_required_files, 0),' / ', (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)) AS total_upload_files"),
 				)
 				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
@@ -221,47 +222,65 @@ class RepoController extends BaseController
 				->leftJoin(
 					DB::raw("(
 						SELECT
-							sub.approvalid, sub.recievedid, sta1.status AS approvalstatus,
-							CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END AS current_branch,
-							stu1.is_received AS isreceived, stu1.is_use_old_files, rud1.repo_id as repoid, sub.unitid
-						FROM (
-							SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
-							FROM stock_transfer_approval sta
-							INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
-							GROUP BY stu.recieved_unit_id
-						) sub
-						INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
-						INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
-						INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
-					) app"),
-					"rud.id",
-					"=",
-					"app.recievedid"
+                            repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
+                        FROM repo_details repo
+                        LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
+                        INNER JOIN (
+                            SELECT * FROM files WHERE isRequired = 1 AND status = 1
+                        ) files ON upload.files_id = files.id
+                        WHERE upload.is_deleted = 0
+                        GROUP BY repo.id, upload.branch_id
+					) files"),
+					"files.repo_id", "=", "rep.id"
 				)
+				->leftJoin(
+					DB::raw("(
+						SELECT
+                            sub.approvalid, sub.recievedid, sta1.status,
+                            CASE
+                                WHEN sta1.status = 1 THEN sta1.to_branch
+                                WHEN sta1.status = 2 THEN sta1.from_branch
+                            END AS current_branch,
+                            stu1.is_received AS isreceived, stu1.is_use_old_files, rud1.repo_id as repoid, sub.unitid
+                        FROM (
+                            SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
+                            FROM stock_transfer_approval sta
+                            INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
+                            GROUP BY stu.recieved_unit_id
+                        ) sub
+                        INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
+                        INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
+                        INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
+					) transfer"),
+					"rud.id", "=", "transfer.recievedid"
+				)
+				->leftJoin(
+					DB::raw("(
+						SELECT
+                            MAX(id) AS latest_id, repo_id, branch, status
+                        FROM request_approvals
+                        GROUP BY repo_id, branch, status
+					) appraisal"), function ($join) {
+                        $join->on("rud.id", "=", "appraisal.repo_id")
+                            ->on('rep.branch_id', '=', 'appraisal.branch');
+                    }
+				)
+				->leftJoin(
+					DB::raw("(
+						SELECT
+                            MAX(id) AS latest_id, repo_id, branch, status
+                        FROM request_refurbishes
+                        GROUP BY repo_id, branch, status
+					) re_refurb"), function ($join) {
+                        $join->on("rep.id", "=", "re_refurb.repo_id")
+                            ->on('rep.branch_id', '=', 're_refurb.branch');
+                    }
+				)
+				->leftJoin('refurbish_processes as se_refurb', 're_refurb.latest_id', '=', 'se_refurb.refurbish_req_id')
 				->leftJoin("sold_units as sld", function ($join) {
 					$join->on("rep.id", "=", "sld.repo_id");
 					$join->on("rep.branch_id", "=", "sld.branch");
 				})
-				->leftJoin("request_refurbishes as ref", function ($join) {
-					$join->on("rep.id", "=", "ref.repo_id");
-					$join->on("rep.branch_id", "=", "ref.branch");
-				})
-				->leftJoin(
-					DB::raw("(
-						SELECT
-							repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
-						FROM repo_details repo
-						LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
-						INNER JOIN (
-							SELECT * FROM files WHERE isRequired = 1 AND status = 1
-						) files ON upload.files_id = files.id
-						WHERE upload.is_deleted = 0
-						GROUP BY repo.id, upload.branch_id
-					) files"),
-					"files.repo_id",
-					"=",
-					"rep.id"
-				)
 				->where(function ($query) {
 					$query->whereNull('sld.repo_id')
 						->orWhere(DB::raw("sld.status"), '!=', '1');
@@ -270,8 +289,8 @@ class RepoController extends BaseController
 			if (Auth::user()->userrole == 'Warehouse Custodian') {
 				$data = $list_of_repos->where('rep.branch_id', '=', Auth::user()->branch)
 					->where(function ($query) {
-						$query->whereNull('app.current_branch')
-							->orWhere(DB::raw("CAST(app.current_branch AS INT)"), '=', DB::raw("CAST(rep.branch_id AS INT)"));
+						$query->whereNull('transfer.current_branch')
+							->orWhere(DB::raw("CAST(transfer.current_branch AS INT)"), '=', DB::raw("CAST(rep.branch_id AS INT)"));
 					})
 					->get();
 			} else {

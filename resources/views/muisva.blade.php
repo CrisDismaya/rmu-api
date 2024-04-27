@@ -254,7 +254,7 @@
 				<td class="" class="">  </td>
 				<td class="" colspan="12"> BACKGROUND OF THE ACCOUNT </td>
 				<td class="" colspan="26">
-					<span style="font-size: 11px; font-style: italic;"> To be fillled-up by FCA/SSA </span>
+					{{-- <span style="font-size: 11px; font-style: italic;"> To be fillled-up by FCA/SSA </span> --}}
 				</td>
 			</tr>
 			<tr>
@@ -279,8 +279,7 @@
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan="">3</td>
 				<td class="" colspan="10">Loan Details</td>
-				<td class="text-bold text-center"> : </td>
-				<td class="" colspan="27"></td>
+				<td class="" colspan="28"></td>
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
@@ -327,7 +326,7 @@
 				<td class="" class="">  </td>
 				<td class="" colspan="12"> DETAILS OF THE UNIT </td>
 				<td class="" colspan="26">
-					<span style="font-size: 11px; font-style: italic;"> To be fillled-up by FCA/SSA </span>
+					{{-- <span style="font-size: 11px; font-style: italic;"> To be fillled-up by FCA/SSA </span> --}}
 				</td>
 			</tr>
 			<tr>
@@ -352,30 +351,30 @@
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
-				<td class="" colspan="10">OR No.</td>
+				<td class="" colspan="10">MV File Number</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->or_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->mv_file_number }}</td>
 				<td class="" colspan="1"></td>
-				<td class="" colspan="5">CRE No.</td>
+				<td class="" colspan="5">Year Model</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->cre_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->year_model }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Plate No.</td>
 				<td class="text-bold text-center"> : </td>
 				<td class="border-bottom" colspan="10">{{ $decodedData[0]->plate_no }}</td>
-				<td class="" colspan="1"></td>
-				<td class="" colspan="5">BR / ARV No.</td>
+				<td class="" colspan="17"></td>
+				{{-- <td class="" colspan="5">BR / ARV No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->br_or_arv_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $decodedData[0]->br_or_arv_no }}</td> --}}
 			</tr>
 			<tr>
 				<td class=""> III </td>
 				<td class="" colspan="">  </td>
 				<td class="" colspan="12"> CONDITION OF THE UNIT </td>
 				<td class="" colspan="26">
-					<span style="font-size: 11px; font-style: italic;"> To be fillled-up by Store Mechanic </span>
+					{{-- <span style="font-size: 11px; font-style: italic;"> To be fillled-up by Store Mechanic </span> --}}
 				</td>
 			</tr>
 			<tr>
@@ -383,23 +382,23 @@
 				<td class="" colspan="10">Classification</td>
 				<td class="" colspan="2"></td>
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'A' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="3">Classs A</td>
+				<td class="" colspan="3">Class A</td>
 				<td class="" colspan=""></td>
 
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'B' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="3">Classs B</td>
+				<td class="" colspan="3">Class B</td>
 				<td class="" colspan=""></td>
 
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'C' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="3">Classs C</td>
+				<td class="" colspan="3">Class C</td>
 				<td class="" colspan=""></td>
 
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'D' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="3">Classs D</td>
+				<td class="" colspan="3">Class D</td>
 				<td class="" colspan=""></td>
 
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'E' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="3">Classs E</td>
+				<td class="" colspan="3">Class E</td>
 				<td class="" colspan="2"></td>
 			</tr>
 			<tr>
@@ -420,7 +419,7 @@
 				<td class="" colspan="10">Good as new repossessed unit</td>
 				<td class="" colspan="2"></td>
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'MINIMAL REPAIR OF REFURBISHMENT' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="10">Minimal repair of refurbishment</td>
+				<td class="" colspan="10">Minimal repair and refurbishment</td>
 				<td class="" colspan="2"></td>
 			</tr>
 			<tr>
@@ -433,7 +432,7 @@
 			</tr>
 			<tr>
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'MEET AN ACCIDENT' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="10">Meet an accident</td>
+				<td class="" colspan="10">Involved in an accident</td>
 				<td class="" colspan="2"></td>
 				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'TOTALLY WRECKED' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Totally wrecked</td>
@@ -442,7 +441,7 @@
 			<tr><td class="tr-space-1" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2"></td>
-				<td class="" colspan="38">Missing / Damage Parts and Accessories</td>
+				<td class="" colspan="38">Missing/Damage Parts</td>
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
@@ -523,7 +522,7 @@
 					<span style="font-size: 11px; font-style: italic;"> To be fillled-up by Accounting Head </span>
 				</td>
 			</tr>
-			<tr>
+			{{-- <tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="12"> Original Selling Price </td>
 				<td class="" colspan="18"></td>
@@ -534,7 +533,7 @@
 				<td class="" colspan="12"> Less : Missing and Damaged Parts </td>
 				<td class="" colspan="18"></td>
 				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($decodedData[0]->original_srp - $total_missing_and_damaged_parts) }}</td>
-			</tr>
+			</tr> --}}
 			<tr>
 				<td class="" colspan="4"></td>
 				<td class="" colspan="36"> Depreciation (From 1st Delivery to Current Date) </td>

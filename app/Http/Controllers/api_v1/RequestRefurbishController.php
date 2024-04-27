@@ -40,14 +40,14 @@ class RequestRefurbishController extends BaseController
 				->join('unit_colors as color', 'repo.color_id', 'color.id')
 				->leftJoin(
 					DB::raw("(
-							SELECT 
+							SELECT
 								repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
 							FROM repo_details repo
 							LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
 							INNER JOIN (
 								SELECT * FROM files WHERE isRequired = 1 AND status = 1
-							) files ON upload.files_id = files.id 
-							WHERE upload.is_deleted = 0 
+							) files ON upload.files_id = files.id
+							WHERE upload.is_deleted = 0
 							GROUP BY repo.id, upload.branch_id
 						) files"),
 					"files.repo_id",
@@ -884,7 +884,7 @@ class RequestRefurbishController extends BaseController
 						->groupBy('unit.repo_id', 'unit.principal_balance')
 						->first();
 
-					DB::table('recieve_unit_details')->where('repo_id', $request->repo_id)->update(['principal_balance' => $total->total_principal_balance]);
+					// DB::table('recieve_unit_details')->where('repo_id', $request->repo_id)->update(['principal_balance' => $total->total_principal_balance]);
 					DB::table('repo_details')->where('id', $request->repo_id)->update(['classification' => $data->re_class]);
 					DB::table('request_refurbishes')->where('id', $data->refurbish_req_id)->update(['status' => '4']);
 				}
@@ -937,8 +937,8 @@ class RequestRefurbishController extends BaseController
 					'old_owner.lastname as o_lastname',
 					DB::raw('CONVERT(DATE,refurbish.created_at) AS date_req'),
 					DB::raw("CASE WHEN refurbish.status = '0' THEN 'PENDING'
-			WHEN refurbish.status = '1' THEN 'APPROVED' 
-			WHEN refurbish.status = '3' THEN 'ON GOING REFURBISH' 
+			WHEN refurbish.status = '1' THEN 'APPROVED'
+			WHEN refurbish.status = '3' THEN 'ON GOING REFURBISH'
 			WHEN refurbish.status = '4' THEN 'DONE'
 			ELSE 'DISAPPROVED' END status"),
 				);

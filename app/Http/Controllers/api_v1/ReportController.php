@@ -53,7 +53,8 @@ class ReportController extends BaseController
 							FORMAT(rep.date_sold, 'MMM dd, yyyy') AS date_granted,
 							bb.total_payments AS total_payment,
 							'' AS date_due,
-                            rep.original_srp,
+                            -- rep.original_srp,
+                            ISNULL(appraise.approved_price, rep.original_srp) + ISNULL(total_cost_parts, 0) AS original_srp,
 							-- (rep.original_srp - bb.total_payments) AS principal_balance,
 							bb.principal_balance AS principal_balance,
 							FORMAT(rep.last_payment, 'MMM dd, yyyy') AS late_date_of_payment,
@@ -62,8 +63,8 @@ class ReportController extends BaseController
 							mdl.model_name AS model,
 							UPPER(rep.model_engine) AS engine_no,
 							UPPER(rep.model_chassis) AS chassis_no,
-							'' AS or_no,
-							'' AS cre_no,
+							rep.mv_file_number AS mv_file_number,
+							rep.year_model AS year_model,
 							UPPER(rep.plate_number) AS plate_no,
 							'' AS br_or_arv_no,
 							UPPER(rep.classification) AS [classification],
@@ -80,6 +81,18 @@ class ReportController extends BaseController
 						LEFT JOIN province prv ON cus.provinces = prv.OrderNumber
 						LEFT JOIN city cty ON cus.cities = cty.MappingId
 						LEFT JOIN barangay brgy ON cus.barangays = brgy.OrderNumber
+                        LEFT JOIN (
+                            SELECT MAX(id) as latest_id, branch, repo_id, approved_price
+                            FROM request_approvals
+                            WHERE status = 1
+                            GROUP BY branch, repo_id, approved_price
+                        ) appraise ON rep.id = appraise.repo_id and rep.branch_id = appraise.branch
+                        LEFT JOIN (
+                            SELECT recieve_id, SUM(actual_price) AS total_cost_parts
+                            FROM recieve_unit_spare_parts
+                            WHERE is_deleted = 0 and refurb_decision = 'done'
+                            GROUP BY recieve_id
+                        ) parts ON bb.id = parts.recieve_id
 						WHERE rep.id = :recid",
 				$param
 			);
