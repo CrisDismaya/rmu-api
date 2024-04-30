@@ -593,9 +593,17 @@
                     }
 
                     $total_depreciation = $decodedData[0]->original_srp * $rate;
-                    $total_smv = $decodedData[0]->original_srp - ($total_missing_and_damaged_parts + $total_depreciation)
+                    $total_smv = $decodedData[0]->original_srp - ($total_missing_and_damaged_parts + $total_depreciation) +
+                            ($decodedData[0]->has_appraised != 'true' ? $decodedData[0]->total_cost_parts : 0)
                 ?>
 				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($total_depreciation) }}</td>
+			</tr>
+			<tr>
+				<td class="" colspan="2"></td>
+				<td class="" colspan="30"> Added Cost - Refubishment </td>
+				<td class="border-bottom text-right text-amount" colspan="8" style="border-bottom: 2px double black;">
+                    {{ formatToMoney($decodedData[0]->total_cost_parts) }}
+                </td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
@@ -611,7 +619,7 @@
 				<td class="" colspan="">  </td>
 				<td class="" colspan="12"> DECISION </td>
 				<td class="" colspan="11">
-					<span style="font-size: 11px; font-style: italic;"> To be filled-up by HOVC </span>
+					<span style="font-size: 11px; font-style: italic;"> </span>
 				</td>
 				<td class="" colspan="7"> Cash Basis </td>
 				<td class="" colspan=""></td>
@@ -620,10 +628,13 @@
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="">1</td>
-				<td class="" colspan="22"> Sell the unit w/out Repair at </td>
-				<td class="border-bottom" colspan="7"></td>
+				<td class="" colspan="22"> Sell the unit (as in) with the appraised value of- </td>
+                <?php
+                    $appraisal_value = $decodedData[0]->has_appraised == 'true' ? formatToMoney($decodedData[0]->approved_appraised_price + $decodedData[0]->total_cost_parts) : '';
+                ?>
+				<td class="border-bottom text-right text-amount" colspan="7">{{ $appraisal_value }}</td>
 				<td class="" colspan=""></td>
-				<td class="border-bottom" colspan="7"></td>
+				<td class="border-bottom text-right text-amount" colspan="7">{{ $appraisal_value }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>

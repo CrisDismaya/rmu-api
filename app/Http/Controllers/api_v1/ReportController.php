@@ -17,29 +17,80 @@ class ReportController extends BaseController
 
 		if ($formType == 'RDAF') {
 			$query = DB::select(
-				'SELECT h.name as branch,CONCAT(nw.firstname,nw.middlename,nw.lastname) as customer,nw.address,
-				nw.nationality,nw.source_of_income,nw.marital_status,nw.date_birth,nw.birth_place,nw.primary_id,nw.primary_id_no,
-				nw.alternative_id,nw.alternative_id_no,
-				d.model_name as model,f.brandname as brand,b.model_engine as engine,b.model_chassis as chassis,
-				bb.total_payments as total_payment,b.original_srp as srp,bb.loan_amount,bb.principal_balance,
-				c.approved_price,g.monthly_amo,g.rebate,g.terms,g.dp,c.date_approved,g.rate,gg.name as financing_store,
-				b.loan_number,b.odo_meter,b.date_surrender,b.date_sold
-				from  repo_details b
-				inner join recieve_unit_details as bb on bb.repo_id = b.id
-				left join (select a.* from request_approvals as a
-				inner join (select max(id) id,repo_id from request_approvals group by repo_id) as b on b.id = a.id
-				) as c on c.repo_id = b.id
-				inner join unit_models d on d.id = b.model_id
-				inner join unit_colors as e on e.id = b.color_id
-				inner join brands as f on f.id = b.brand_id
-				left join sold_units as g on g.repo_id = b.id
-				left join customer_profile as nw on nw.id = g.new_customer
-				inner join locations as gg on gg.id = b.location
-				inner join branches as h on h.id = b.branch_id where b.id = :recid',
+				'SELECT
+                    brh.name as branch,
+                    CONCAT(cus.firstname, cus.middlename, cus.lastname) as customer,
+                    cus.address,
+                    cus.nationality,
+                    cus.source_of_income,
+                    cus.marital_status,
+                    cus.date_birth,
+                    cus.birth_place,
+                    cus.primary_id,
+                    cus.primary_id_no,
+                    cus.alternative_id,
+                    cus.alternative_id_no,
+                    mdl.model_name as model,
+                    brd.brandname as brand,
+                    repo.model_engine as engine,
+                    repo.model_chassis as chassis,
+                    rud.total_payments as total_payment,
+                    repo.original_srp as srp,
+                    rud.loan_amount,
+                    rud.principal_balance,
+                    sld.monthly_amo,
+                    sld.rebate,
+                    sld.terms,
+                    sld.dp,
+                    sld.rate,
+                    loc.name as financing_store,
+                    repo.loan_number,
+                    repo.odo_meter,
+                    repo.date_surrender,
+                    repo.date_sold,
+                    appraise.approved_price,
+                    repo.id as repo_id
+                FROM recieve_unit_details rud
+                INNER JOIN repo_details repo ON rud.repo_id = repo.id
+                LEFT JOIN customer_profile cus ON repo.customer_acumatica_id = cus.id
+                LEFT JOIN brands brd ON repo.brand_id = brd.id
+                LEFT JOIN unit_models mdl ON repo.model_id = mdl.id
+                LEFT JOIN users usr ON rud.approver = usr.id
+                LEFT JOIN branches brh ON repo.branch_id = brh.id
+                LEFT JOIN locations loc ON repo.location = loc.id
+                LEFT JOIN (
+                    SELECT MAX(id) as latest_id, branch, repo_id, approved_price
+                    FROM request_approvals
+                    WHERE status = 1
+                    GROUP BY branch, repo_id, approved_price
+                ) appraise ON appraise.repo_id = repo.id AND appraise.branch = repo.branch_id
+                LEFT JOIN sold_units sld ON repo.id = sld.repo_id
+                WHERE repo.id = :recid',
 				$param
 			);
 
-			$parts = [];
+            $parts = [];
+
+			$history =  DB::select(
+                "SELECT
+                    history.appraised_price,
+                    UPPER(
+                        CONCAT(usrs.firstname,
+                            CASE
+                                WHEN usrs.middlename != '' THEN CONCAT(' ', usrs.middlename, ' ')
+                            ELSE ' ' END, usrs.lastname
+                        )
+                    ) AS fullname,
+                    FORMAT(history.date_approved, 'MMM dd, yyyy') AS date_approved,
+                    appraise.remarks
+                FROM repo_details repo
+                LEFT JOIN request_approvals appraise ON repo.id = appraise.repo_id
+                LEFT JOIN appraisal_histories history ON appraise.id = history.appraisal_req_id
+                LEFT JOIN users usrs ON history.approver = usrs.id
+                WHERE repo.id = :recid AND appraise.status = 1
+                ORDER BY history.created_at",
+                $param
+            );
 		} else {
 			$query = DB::select(
 				"SELECT
@@ -54,7 +105,10 @@ class ReportController extends BaseController
 							bb.total_payments AS total_payment,
 							'' AS date_due,
                             -- rep.original_srp,
-                            ISNULL(appraise.approved_price, rep.original_srp) + ISNULL(total_cost_parts, 0) AS original_srp,
+	                        appraise.approved_price AS approved_appraised_price,
+							CASE WHEN appraise.approved_price IS NOT NULL THEN 'true' ELSE 'false' END AS has_appraised,
+                            rep.original_srp AS original_srp,
+                            ISNULL(total_cost_parts, 0) AS total_cost_parts,
 							-- (rep.original_srp - bb.total_payments) AS principal_balance,
 							bb.principal_balance AS principal_balance,
 							FORMAT(rep.last_payment, 'MMM dd, yyyy') AS late_date_of_payment,
@@ -108,6 +162,8 @@ class ReportController extends BaseController
 					AND repo.id = :recid",
 				$param
 			);
+
+            $history = [];
 		}
 		// dd($query);
 
@@ -118,6 +174,7 @@ class ReportController extends BaseController
 				'data' => array(
 					'datas' => json_encode($query),
 					'parts' => json_encode($parts),
+					'history' => json_encode($history),
 					'report_src' => $src
 				)
 			)

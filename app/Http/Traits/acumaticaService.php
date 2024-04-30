@@ -13,13 +13,13 @@ use GuzzleHttp\Client as Guzzle;
 use GuzzleHttp\Cookie\CookieJar;
 
 trait acumaticaService {
-	
+
 	public $host = 'https://ciclo.acumatica.com';
 	public $version = '20.200.001';
 	public $sold_units_id;
 	public $repo_id;
 	public $filtered_status = [200, 202, 204];
-	
+
 	public function __construct(){
 		$this->guzzle = new Guzzle();
 		$this->cookies = new CookieJar();
@@ -64,7 +64,7 @@ trait acumaticaService {
 
 			$responseBody = json_decode($response->getBody()->getContents());
 			$code = $response->getStatusCode();
-			
+
 			$res = [];
 			if ($code == 200 || $code == 204 || $code == 202) {
 				$res = [ 'status' => 200, 'message' => 'Successfully Saved!', 'data' => $responseBody ];
@@ -103,7 +103,7 @@ trait acumaticaService {
 				$data = array();
 				foreach ($response['data'] as $obj) {
 					# code...
-					
+
 					if($obj->IsActive->value){
 						array_push($data,['id' => $obj->SalespersonID->value, 'name' => $obj->Name->value]);
 					}
@@ -117,17 +117,88 @@ trait acumaticaService {
 		return $res;
 	}
 
-	public function create_customer($salesDetails){
+	public function create_customer($sold_id){
 		$acu_login = $this->acumatica_login();
 		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/Customer";
-		
-		$this->repo_id = $salesDetails->repo_id;
-		$this->sold_units_id = $salesDetails->id;
-		$customer_details = customer_profiling::where('id', $salesDetails->new_customer)->first();
+
+		$info = DB::table('sold_units sld')
+        ->select(
+            'sld.id', 'sld.repo_id', 'cus.acumatica_id',
+            DB::raw("
+                UPPER(
+                    CONCAT(cus.firstname,
+                        CASE
+                            WHEN cus.middlename != '' THEN CONCAT(' ', cus.middlename, ' ')
+                        ELSE ' ' END, cus.lastname
+                    )
+                ) AS fullname"
+            ),
+            'cus.firstname', 'cus.lastname', 'prv.Title AS province_title', 'cty.Title AS city_title', 'bry.Title AS barangay_title',
+            'cus.address', 'cus.contact', 'sld.branch', 'sld.ExternalReference', 'sld.AgentID',
+            DB::raw('(sld.terms * 30) AS terms'),
+            DB::raw("CASE WHEN sld.sale_type = 'C' THEN 'RS' ELSE 'RI' END AS sale_type")
+        )
+        ->leftjoin('customer_profile cus', 'sld.new_customer', 'cus.id')
+        ->leftjoin('province prv', 'cus.provinces', 'prv.OrderNumber')
+        ->leftjoin('city cty', 'cus.cities', 'cty.MappingId')
+        ->leftjoin('barangay bry', 'cus.barangays', 'bry.OrderNumber')
+		->where('sld.id', $sold_id)->first();
+
+		$this->sold_units_id = $info->id;
+		$this->repo_id = $info->repo_id;
+
+        $param = [
+			"CustomerID" =>  [ "value" => "<NEW>"],
+			"CustomerClass" =>  [ "value" => "TCUST"],
+			"CustomerName" =>  [ "value" => "$info->fullname" ],
+			"Status" =>  [ "value" => "ACTIVE"],
+			"FirstName" =>  [ "value" => $info->firstname],
+			"LastName" =>  [ "value" => $info->lastname],
+			"AddressLine1" =>  [ "value" => $info->address],
+			"Barangay" =>  [ "value" => $info->barangay_title],
+			"City" => [ "value" => $info->city_title],
+			"Province" =>  [ "value" => $info->province_title],
+			"Country" => [ "value" => "PH"],
+			"Email" =>  [ "value" => "jdelacruz@gmail.com"],
+			"ContactNumber" =>  [ "value" => $info->contact],
+			"Terms" =>  [ "value" => $info->terms . "D"],
+			"StatementCycleID" =>  [ "value" => "30D"],
+			"FinanceBy" =>  [ "value" => "CUST00000000011"],
+			"TaxZone" =>  [ "value" => "VAT"],
+			"TIN" =>  [ "value" => "000-000-000-000"],
+			"ATC" =>  [ "value" => "W000"],
+			"Branch" =>  [ "value" => "PAS032"],
+		];
+
+        if($acu_login['status'] !== 200){
+            return false;
+        }
+
+        $checker = $this->acumatica_checker($this->sold_units_id);
+        // if (strpos($customer_details->acumatica_id, 'CUST') !== false) {
+        //     return $this->create_sales_order(
+        //         $customer_details->acumatica_id,
+        //         $customer_details,
+        //         $sold_details->branch,
+        //         $sold_details->repo_id,
+        //         $sold_details->ExternalReference,
+        //         $sold_details->AgentID,
+        //         $orderType
+        //     );
+        // }
+
+
+        return true;
+
+        // old
+		$sold_details = sold_unit::where('id', $sold_id)->first();
+		$this->repo_id = $sold_details->repo_id;
+		$this->sold_units_id = $sold_details->id;
+		$orderType = $sold_details->sale_type == 'C' ? 'RS' : 'RI';
+		$customer_details = customer_profiling::where('id', $sold_details->new_customer)->first();
 		$province = DB::table('province')->where('OrderNumber',$customer_details->provinces)->first();
 		$city = DB::table('city')->where('MappingId',$customer_details->cities)->first();
 		$brgy = DB::table('barangay')->where('OrderNumber',$customer_details->barangays)->first();
-		$orderType = $salesDetails->sale_type == 'C' ? 'RS' : 'RI'; 
 
 		$param = [
 			"CustomerID" =>  [ "value" => "<NEW>"],
@@ -143,7 +214,7 @@ trait acumaticaService {
 			"Country" => [ "value" => "PH"],
 			"Email" =>  [ "value" => "jdelacruz@gmail.com"],
 			"ContactNumber" =>  [ "value" => $customer_details->contact],
-			"Terms" =>  [ "value" => ($salesDetails->terms * 30) . "D"],
+			"Terms" =>  [ "value" => ($sold_details->terms * 30) . "D"],
 			"StatementCycleID" =>  [ "value" => "30D"],
 			"FinanceBy" =>  [ "value" => "CUST00000000011"],
 			"TaxZone" =>  [ "value" => "VAT"],
@@ -151,7 +222,7 @@ trait acumaticaService {
 			"ATC" =>  [ "value" => "W000"],
 			"Branch" =>  [ "value" => "PAS032"],
 		];
-		
+
 		if($acu_login['status'] === 200){
 			$checker = $this->acumatica_checker($this->sold_units_id);
 			if($checker['boolean']){
@@ -161,26 +232,27 @@ trait acumaticaService {
 					return $this->create_sales_order(
 						$customer_details->acumatica_id,
 						$customer_details,
-						$salesDetails->branch,
-						$salesDetails->repo_id,
-						$salesDetails->ExternalReference,
-						$salesDetails->AgentID,
+						$sold_details->branch,
+						$sold_details->repo_id,
+						$sold_details->ExternalReference,
+						$sold_details->AgentID,
 						$orderType
 					);
 				}
-				else{
-					$response = $this->acumatica_request('PUT', $endpoint, $param, 'Customer', $salesDetails);
+				else {
+					$response = $this->acumatica_request('PUT', $endpoint, $param, 'Customer', $sold_details);
 					$status = $response['status'] ?? null;
 					if($status === 200){
 						$acumatica_id = $response['data']->CustomerID->value;
 						customer_profiling::where('id', $customer_details->id)->update([ 'acumatica_id' => $acumatica_id ]);
+
 						return $this->create_sales_order(
 							$acumatica_id,
 							$customer_details,
-							$salesDetails->branch,
-							$salesDetails->repo_id,
-							$salesDetails->ExternalReference,
-							$salesDetails->AgentID,
+							$sold_details->branch,
+							$sold_details->repo_id,
+							$sold_details->ExternalReference,
+							$sold_details->AgentID,
 							$orderType
 						);
 					}
@@ -195,15 +267,15 @@ trait acumaticaService {
 		}
 		return true;
 	}
-	
+
 	public function create_sales_order($acumatica_id, $customer, $branch, $repoId, $ExternalReference, $AgentID, $orderType){
 		$acu_login = $this->acumatica_login();
-		  
+
 		$branchInfo = DB::table('branches')->where('id', $branch)->first();
 		$repo_details = DB::table('repo_details')->where('id', $repoId)->first();
 		$inventoryInfo = DB::table('unit_models')->where('id', $repo_details->model_id)->first();
 		$colorInfo = DB::table('unit_colors')->where('id', $repo_details->color_id)->first();
-		
+
 		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/SalesOrder";
 		$param =  [
 			"OrderType" => [ "value" => $orderType ],
@@ -231,7 +303,7 @@ trait acumaticaService {
 			]
 		];
 		$res = [];
-		
+
 		if($acu_login['status'] === 200){
 			$response = $this->acumatica_request('PUT', $endpoint, $param, 'SalesOrder', [
 				'acumatica_id' => $acumatica_id,
@@ -258,7 +330,7 @@ trait acumaticaService {
 		}
 		return false;
 	}
-	
+
 	public function create_shipment($OrderRefNbr, $warehouse, $orderType){
 		$acu_login = $this->acumatica_login();
 		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/SalesOrder/CreateShipment";
@@ -269,7 +341,7 @@ trait acumaticaService {
 			],
 			"Parameters" => [
 				"ShipmentDate" => [ "value" => date('m/d/Y') ],
-				"WarehouseID" => [ "value" => $warehouse ]	
+				"WarehouseID" => [ "value" => $warehouse ]
 			]
 		];
 		$res = [];
@@ -280,7 +352,7 @@ trait acumaticaService {
 				'warehouse' => $warehouse,
 				'orderType' => $orderType,
 			]);
-			
+
 			$status = $response['status'] ?? null;
 			if($status === 200){
 				return $this->getShipmentNumber($OrderRefNbr, $orderType);
@@ -294,10 +366,10 @@ trait acumaticaService {
 		}
 		return false;
 	}
-	
+
 	public function getShipmentNumber($OrderRefNbr, $orderType){
 		$acu_login = $this->acumatica_login();
-		$endpoint = 'https://ciclo.acumatica.com/entity/CICLO-API/20.200.001/SalesOrder?$filter=OrderType eq '."'$orderType'".' and OrderRefNbr eq '."'$OrderRefNbr'";
+		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/SalesOrder?\$filter=OrderType eq '{$orderType}' and OrderRefNbr eq '{$OrderRefNbr}'";
 		$param =  [];
 		$res = [];
 
@@ -306,7 +378,7 @@ trait acumaticaService {
 				'OrderRefNbr' => $OrderRefNbr,
 				'orderType' => $orderType,
 			]);
-			
+
 			$status = $response['status'] ?? null;
 			if($status === 200){
 				// Update and UnHold Shipment
@@ -324,7 +396,7 @@ trait acumaticaService {
 		}
 		return false;
 	}
-	
+
 	public function update_and_unhold_shipment($ShipmentNbr, $desciption){
 		$acu_login = $this->acumatica_login();
 		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/Shipment";
@@ -341,7 +413,7 @@ trait acumaticaService {
 				'ShipmentNbr' => $ShipmentNbr,
 				'desciption' => $desciption,
 			]);
-			
+
 			$status = $response['status'] ?? null;
 			if($status === 200){
 				return $this->confirm_shipment($ShipmentNbr);
@@ -360,7 +432,7 @@ trait acumaticaService {
 		$acu_login = $this->acumatica_login();
 		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/Shipment/ConfirmShipment";
 		$param =  [
-			"entity" => [ 
+			"entity" => [
 				"Type" => [ "value" => "Shipment" ],
 				"ShipmentNbr" => [ "value" => "{$ShipmentNbr}" ],
 			]
@@ -390,7 +462,7 @@ trait acumaticaService {
 		$acu_login = $this->acumatica_login();
 		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/Shipment/updateIN";
 		$param =  [
-			"entity" => [ 
+			"entity" => [
 				"Type" => [ "value" => "Shipment" ],
 				"ShipmentNbr" => [ "value" => "{$ShipmentNbr}" ],
 			]
@@ -401,7 +473,7 @@ trait acumaticaService {
 			$response = $this->acumatica_request('POST', $endpoint, $param, 'updateIN', [
 				'ShipmentNbr' => $ShipmentNbr
 			]);
-			
+
 			$status = $response['status'] ?? null;
 			if($status == 200){
 				return true;

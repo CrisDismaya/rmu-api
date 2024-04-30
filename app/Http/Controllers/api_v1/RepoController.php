@@ -257,9 +257,15 @@ class RepoController extends BaseController
 				->leftJoin(
 					DB::raw("(
 						SELECT
-                            MAX(id) AS latest_id, repo_id, branch, status
-                        FROM request_approvals
-                        GROUP BY repo_id, branch, status
+                            rec.latest_id, MAX(app.repo_id) AS repo_id , branch, status
+                        FROM request_approvals app
+                        INNER JOIN (
+                            SELECT
+                                MAX(id) AS latest_id, repo_id
+                            FROM request_approvals
+                            GROUP BY repo_id
+                        ) rec ON app.id = rec.latest_id
+                        GROUP BY rec.latest_id, branch, status
 					) appraisal"), function ($join) {
                         $join->on("rud.id", "=", "appraisal.repo_id")
                             ->on('rep.branch_id', '=', 'appraisal.branch');

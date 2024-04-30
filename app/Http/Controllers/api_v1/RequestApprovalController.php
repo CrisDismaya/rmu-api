@@ -73,13 +73,17 @@ class RequestApprovalController extends BaseController
                 )
                 ->leftJoin(
                     DB::raw("(
-                        SELECT MAX(id) as latest_id, branch, repo_id, approved_price
-                        FROM request_approvals
-                        WHERE status = 1
-                        GROUP BY branch, repo_id, approved_price
+                        SELECT req.branch, req.repo_id, req.approved_price
+                        FROM (
+                            SELECT MAX(id) as latest_id, repo_id
+                            FROM request_approvals
+                            WHERE status = 1
+                            GROUP BY repo_id
+                        ) sub
+                        INNER JOIN request_approvals req ON sub.latest_id = req.id
                     ) appraise"), function ($join) {
-                        $join->on('appraise.repo_id', '=', 'repo.id')
-                            ->on('appraise.branch', '=', 'repo.branch_id');
+                        $join->on('repo.id', '=', 'appraise.repo_id')
+                            ->on('repo.branch_id', '=', 'appraise.branch');
                     }
                 )
                 ->leftJoin(
@@ -92,15 +96,6 @@ class RequestApprovalController extends BaseController
                     ) total_parts"),
                     "total_parts.repo_id", "=", "repo.id"
                 )
-                ->leftJoin(
-                    DB::raw("(
-                        SELECT recieve_id, SUM(actual_price) AS total_cost_parts
-                        FROM recieve_unit_spare_parts
-                        WHERE is_deleted = 0 and refurb_decision = 'done'
-                        GROUP BY recieve_id
-                    ) parts"),
-                    "rud.id", "=", "parts.recieve_id"
-                )
                 ->select(
                     'rud.*',
                     'repo.model_engine',
@@ -111,30 +106,41 @@ class RequestApprovalController extends BaseController
                     'brd.brandname',
                     'mdl.model_name',
                     'color.name as color',
-                    DB::raw('DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month'),
                     DB::raw('
                         CASE
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
-                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .05)
+                            WHEN appraise.approved_price IS NULL THEN (
+                                CASE
+                                    WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                        THEN (repo.original_srp) -
+                                            (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
-                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .10)
+                                    WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                        THEN (repo.original_srp) -
+                                            (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
-                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .15)
+                                    WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                        THEN (repo.original_srp) -
+                                            (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
-                                THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                    (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .20)
-                        ELSE 0 END AS standard_matrix_value
+                                    WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                        THEN (repo.original_srp) -
+                                            (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
+                                ELSE 0 END
+                            )
+                            ELSE appraise.approved_price
+                        END AS current_price
                     ')
                 )
                 ->where('rud.is_sold', 'N')
                 ->where('rud.status', '!=', '4')
                 ->whereRaw('ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)')
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('request_approvals')
+                        ->whereRaw('request_approvals.repo_id = repo.id')
+                        ->whereRaw('request_approvals.branch =' . Auth::user()->branch)
+                        ->where('request_approvals.status', '!=', '1');
+                })
                 ->whereNotExists(function ($query) {
                     $query->select(DB::raw(1))
                         ->from('sold_units')
@@ -515,26 +521,23 @@ class RequestApprovalController extends BaseController
                     repo.created_at AS date_received, received.principal_balance AS original_srp,
                     DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month,
                     CASE
-                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
-                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .05)
+                        WHEN appraise.approved_price IS NULL THEN (
+                            CASE
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
-                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .10)
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
-                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .15)
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-                        WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
-                            THEN (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) -
-                                (ISNULL(total_parts.total_parts_price, 0) + (ISNULL(appraise.approved_price, repo.original_srp) + ISNULL(parts.total_cost_parts, 0)) * .20)
-                    ELSE 0 END AS standard_matrix_value,
-                    CASE
-                        WHEN req.approved_price IS NULL THEN received.principal_balance
-                        ELSE req.approved_price
-                    END AS current_appraised,
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
+                            ELSE 0 END
+                        )
+                        ELSE appraise.approved_price
+                    END AS current_price,
                     req.approved_price,
                     DATEDIFF(DAY, (CONVERT(DATE, repo.date_surrender)), GETDATE()) AS aging, qty.quantity,
                     CASE
@@ -617,10 +620,14 @@ class RequestApprovalController extends BaseController
                     INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
                 ) AS [transfer] ON repo.id = [transfer].repoid
                 LEFT JOIN (
-                    SELECT MAX(id) as latest_id, branch, repo_id, approved_price
-                    FROM request_approvals
-                    WHERE status = 1
-                    GROUP BY branch, repo_id, approved_price
+                    SELECT req.branch, req.repo_id, req.approved_price
+                    FROM (
+                        SELECT MAX(id) as latest_id, repo_id
+                        FROM request_approvals
+                        WHERE status = 1
+                        GROUP BY repo_id
+                    ) sub
+                    INNER JOIN request_approvals req ON sub.latest_id = req.id
                 ) appraise ON repo.id = appraise.repo_id and repo.branch_id = appraise.branch
                 LEFT JOIN (
                     SELECT recieve_id, SUM(actual_price) AS total_cost_parts
@@ -710,33 +717,77 @@ class RequestApprovalController extends BaseController
 
         try {
 
-            $received_units = receive_unit::with(['spare_parts_details', 'repo_details'])
-                ->where('id', $id)->first();
+            $details = DB::table('recieve_unit_details AS rud')
+                ->select(
+                    'repo.id AS repo_id', 'rud.id AS receive_id', 'repo.original_srp',
+                    DB::raw('ISNULL(total_parts.total_parts_price, 0) AS total_parts_price'),
+                    DB::raw('ISNULL(parts.total_cost_parts, 0) AS total_cost_parts'),
+                    DB::raw('CASE
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                THEN repo.original_srp * .05
 
-            $tmdp = 0;
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                THEN repo.original_srp * .10
 
-            for ($i = 0; $i < count($received_units->spare_parts_details); $i++) {
-                $data = $received_units->spare_parts_details[$i];
-                if($data->refurb_decision != 'done'){
-					$tmdp += $data->price;
-				}
-            }
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                THEN repo.original_srp * .15
 
-            $refurbish = request_refurbish::with(['missingParts'])
-                ->where('repo_id', $id)->where('status', 3)->first();
-            $refurb = 0;
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                THEN repo.original_srp * .20
+                        ELSE 0 END AS depreciation_cost'
+                    ),
+                    DB::raw('
+                        CASE
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-            if ($refurbish) {
-                for ($i = 0; $i < count($refurbish->missingParts); $i++) {
-                    $data = $refurbish->missingParts[$i];
-                    $refurb += $data->price;
-                }
-            }
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-            $start = Carbon::parse($firstdatesold);
-            $end = Carbon::parse(Carbon::now());
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-            $unit_age = $end->diffInDays($start);
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
+                        ELSE 0 END AS standard_matrix_value'
+                    ),
+                    DB::raw('DATEDIFF(DAY, (CONVERT(DATE, repo.date_sold)), GETDATE()) AS date_age'),
+                )
+                ->join('repo_details AS repo', 'rud.repo_id', 'repo.id')
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT rud.repo_id, SUM(price) total_parts_price
+                        FROM recieve_unit_details rud
+                        LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
+                        WHERE rus.is_deleted = 0 and (rus.refurb_decision IS NULL OR rus.refurb_decision = 'na')
+                        GROUP BY rud.repo_id
+                    ) total_parts"),
+                    "total_parts.repo_id", "=", "repo.id"
+                )
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT rud.repo_id, SUM(price) total_cost_parts
+                        FROM recieve_unit_details rud
+                        LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
+                        WHERE rus.is_deleted = 0 and refurb_decision = 'done'
+                        GROUP BY rud.repo_id
+                    ) AS parts"),
+                    "parts.repo_id", "=", "repo.id"
+                )
+                ->leftJoin(
+                    DB::raw("(
+                        SELECT MAX(id) as latest_id, branch, repo_id, approved_price
+                        FROM request_approvals
+                        WHERE status = 1
+                        GROUP BY branch, repo_id, approved_price
+                    ) AS appraise"), function ($join) {
+                        $join->on('appraise.repo_id', '=', 'repo.id')
+                            ->on('appraise.branch', '=', 'repo.branch_id');
+                    }
+                )
+                ->where('rud.id', $id)
+            ->first();
+
 
             $has_matrix_setup = unit_aging::count();
 
@@ -744,40 +795,83 @@ class RequestApprovalController extends BaseController
                 return  $this->sendError('Validation Error.', 'No depriciation matrix. Please contact your system administrator!');
             }
 
-            switch ($unit_age) {
-                case ($unit_age <= 180):
-                    $unit_criteria = unit_aging::where('days', '>=', $unit_age)->where('days', '<=', 180)->first();
-                    break;
-                case ($unit_age <= 360):
-                    $unit_criteria = unit_aging::where('days', '>=', $unit_age)->where('days', '<=', 360)->first();
-                    break;
-                case ($unit_age <= 720):
-                    $unit_criteria = unit_aging::where('days', '>=', $unit_age)->where('days', '<=', 720)->first();
-                    break;
-                case ($unit_age >= 721):
-                    $unit_criteria = unit_aging::latest('days')->first();
-                    break;
-            }
-
-            //start of totaling the suggested repo price
-
-            $depreciation = ($received_units->principal_balance) * ('0.' . ($unit_criteria->Depreceiation_Cost < 10 ? '0' . $unit_criteria->Depreceiation_Cost : $unit_criteria->Depreceiation_Cost));
-            $md_max_limiter = ($received_units->principal_balance) * ('0.' . ($unit_criteria->Estimated_Cost_of_MD_Parts < 10 ? '0' . $unit_criteria->Estimated_Cost_of_MD_Parts : $unit_criteria->Estimated_Cost_of_MD_Parts));
-            $total_md = $tmdp < $md_max_limiter ? $tmdp : $md_max_limiter;
-            $immidiate_sales_value =  ($received_units->principal_balance) * ('0.' . ($unit_criteria->Immediate_Sales_Value < 10 ? '0' . $unit_criteria->Immediate_Sales_Value : $unit_criteria->Immediate_Sales_Value));
-
-            // $suggested_price = ($received_units->principal_balance) - ($depreciation + ($refurb > 0 ? 0 : $total_md));
-            $suggested_price = ($received_units->principal_balance) - (($refurb > 0 ? 0 : $total_md) > $depreciation ? $depreciation : $total_md);
-
-            //end of computation
-
             return [
-                'days' => $unit_age,
-                'depreciation' => $depreciation,
-                'emdp' => $refurb > 0 ? 0 : $md_max_limiter,
-                't_mdp' => $refurb > 0 ? 0 : $tmdp,
-                'sp' => $refurb > 0 ? ($suggested_price + $refurb) : $suggested_price
+                'days' => $details->date_age,
+                'depreciation' => $details->depreciation_cost,
+                'emdp' => $details->total_parts_price,
+                't_mdp' => ($details->depreciation_cost + $details->total_parts_price),
+                'sp' => $details->standard_matrix_value
             ];
+            // old
+
+            // $received_units = receive_unit::with(['spare_parts_details', 'repo_details'])
+            //     ->where('id', $id)->first();
+
+            // $tmdp = 0;
+
+            // for ($i = 0; $i < count($received_units->spare_parts_details); $i++) {
+            //     $data = $received_units->spare_parts_details[$i];
+            //     if($data->refurb_decision != 'done'){
+			// 		$tmdp += $data->price;
+			// 	}
+            // }
+
+            // $refurbish = request_refurbish::with(['missingParts'])
+            //     ->where('repo_id', $id)->where('status', 3)->first();
+            // $refurb = 0;
+
+            // if ($refurbish) {
+            //     for ($i = 0; $i < count($refurbish->missingParts); $i++) {
+            //         $data = $refurbish->missingParts[$i];
+            //         $refurb += $data->price;
+            //     }
+            // }
+
+            // $start = Carbon::parse($firstdatesold);
+            // $end = Carbon::parse(Carbon::now());
+
+            // $unit_age = $end->diffInDays($start);
+
+            // $has_matrix_setup = unit_aging::count();
+
+            // if ($has_matrix_setup == 0) {
+            //     return  $this->sendError('Validation Error.', 'No depriciation matrix. Please contact your system administrator!');
+            // }
+
+            // switch ($unit_age) {
+            //     case ($unit_age <= 180):
+            //         $unit_criteria = unit_aging::where('days', '>=', $unit_age)->where('days', '<=', 180)->first();
+            //         break;
+            //     case ($unit_age <= 360):
+            //         $unit_criteria = unit_aging::where('days', '>=', $unit_age)->where('days', '<=', 360)->first();
+            //         break;
+            //     case ($unit_age <= 720):
+            //         $unit_criteria = unit_aging::where('days', '>=', $unit_age)->where('days', '<=', 720)->first();
+            //         break;
+            //     case ($unit_age >= 721):
+            //         $unit_criteria = unit_aging::latest('days')->first();
+            //         break;
+            // }
+
+            // //start of totaling the suggested repo price
+
+            // $depreciation = ($received_units->principal_balance) * ('0.' . ($unit_criteria->Depreceiation_Cost < 10 ? '0' . $unit_criteria->Depreceiation_Cost : $unit_criteria->Depreceiation_Cost));
+            // $md_max_limiter = ($received_units->principal_balance) * ('0.' . ($unit_criteria->Estimated_Cost_of_MD_Parts < 10 ? '0' . $unit_criteria->Estimated_Cost_of_MD_Parts : $unit_criteria->Estimated_Cost_of_MD_Parts));
+            // $total_md = $tmdp < $md_max_limiter ? $tmdp : $md_max_limiter;
+            // $immidiate_sales_value =  ($received_units->principal_balance) * ('0.' . ($unit_criteria->Immediate_Sales_Value < 10 ? '0' . $unit_criteria->Immediate_Sales_Value : $unit_criteria->Immediate_Sales_Value));
+
+            // // $suggested_price = ($received_units->principal_balance) - ($depreciation + ($refurb > 0 ? 0 : $total_md));
+            // $suggested_price = ($received_units->principal_balance) - (($refurb > 0 ? 0 : $total_md) > $depreciation ? $depreciation : $total_md);
+
+            // //end of computation
+
+            // return [
+            //     'days' => $details->date_age,
+            //     'depreciation' => $depreciation,
+            //     'emdp' => $refurb > 0 ? 0 : $md_max_limiter,
+            //     't_mdp' => $refurb > 0 ? 0 : $tmdp,
+            //     'sp' => $refurb > 0 ? ($suggested_price + $refurb) : $suggested_price
+            // ];
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -1054,9 +1148,9 @@ class RequestApprovalController extends BaseController
             if ($request->status == 1) {
                 $fetch_sequence = $this->approverDecision($request->module_id, $request->id, Auth::user()->id);
                 if ($fetch_sequence == 0) {
-                    $get_salesDetails = sold_unit::where('id', $request->id)->first();
+                    // $get_salesDetails = sold_unit::where('id', $request->id)->first();
 
-                    // $boolean = $this->create_customer($get_salesDetails);
+                    // $boolean = $this->create_customer($request->id);
                     // if ($boolean) {
                     //     receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
                     //     sold_unit::where('id', $request->id)->update(['status' => $request->status]);

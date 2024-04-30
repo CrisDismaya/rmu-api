@@ -90,7 +90,7 @@
         table {
         width: 100%;
         }
-     
+
         #tb2 {
             max-width: 750px;
         }
@@ -103,6 +103,14 @@
         $dataExtract = $data['datas'];
         $report_src = $data['report_src'];
         $decodedData = json_decode($dataExtract);
+
+
+        $dataHistory = $data['history'];
+        $decodeHistory = json_decode($dataHistory);
+
+        function formatToMoney($number) {
+            return number_format($number, 2, '.', ',');
+        }
     ?>
 
 
@@ -113,7 +121,7 @@
                         <img style="display:inline-block; margin-left: 15px;" src="{{ public_path('image/rdaf-logo.jpeg') }}" width="110%"   alt="">
                     </td>
                     <td  style="width:85%; padding-top:30px;">
-                    
+
                     <center>  <h3>Trans Asiatic Finance Incorporated</h3>
                     Unit 13, 2nd Floor Beacon Commercial Place, Apollo 3, Moonwalk Village, Las Piñas City
                             Email and Contact Number: tafi@transasiaticfin.ph / 0919-074-3252
@@ -130,7 +138,7 @@
                     Branch
                 </td>
                 <td class="td-class">
-                   {{ $decodedData[0]->branch}}
+                   {{ $decodedData[0]->branch }}
                 </td>
                 <td class="td-class">
                     Date
@@ -204,10 +212,10 @@
                 {{ $decodedData[0]->marital_status}}
                 </td>
                 <td class="td-class">
-                    
+
                 </td>
                 <td class="td-class">
-                  
+
                 </td>
             </tr>
             <tr>
@@ -218,10 +226,10 @@
                 {{ $decodedData[0]->date_birth}}
                 </td>
                 <td class="td-class">
-                    
+
                 </td>
                 <td class="td-class">
-                    
+
                 </td>
             </tr>
             <tr>
@@ -232,10 +240,10 @@
                 {{ $decodedData[0]->birth_place}}
                 </td>
                 <td class="td-class">
-                    
+
                 </td>
                 <td class="td-class">
-                    
+
                 </td>
             </tr>
         </table>
@@ -265,21 +273,21 @@
                     <td class="td-class" style="width:8%">Aging Days</td>
                     <td class="td-class" style="width:8%"> {{ $decodedData[0]->customer}}</td>
                     <td class="td-class" style="width:8%"> {{ $decodedData[0]->brand}}  {{ $decodedData[0]->model}}</td>
-                    <td class="td-class" style="width:8%">{{ $decodedData[0]->srp}}</td>
-                    <td class="td-class" style="width:8%">{{ $decodedData[0]->principal_balance}}</td>
+                    <td class="td-class" style="width:8%">{{ formatToMoney($decodedData[0]->srp) }}</td>
+                    <td class="td-class" style="width:8%">{{ formatToMoney($decodedData[0]->principal_balance) }}</td>
                     <td class="td-class" style="width:8%">{{ $decodedData[0]->engine}}{{ $decodedData[0]->chassis}}</td>
                     <td class="td-class" style="width:8%">{{ $decodedData[0]->odo_meter}}</td>
-                    <td class="td-class" style="width:8%">{{ $decodedData[0]->total_payment}}</td>
+                    <td class="td-class" style="width:8%">{{ formatToMoney($decodedData[0]->total_payment) }}</td>
                 </tr>
             </table>
             <br />
             <table >
                 <tr>
                     <td class="td-class" style="width:20%">Current ROPA Price</td>
-                    <td class="td-class" style="width:80%"><span style="color:red;">{{ $decodedData[0]->principal_balance}}</span></td>
+                    <td class="td-class" style="width:80%"><span style="color:red;">{{ formatToMoney($decodedData[0]->approved_price) }}</span></td>
                 </tr>
             </table>
-        
+
             <br />
             <span><small>Branch / Dealer Recommendation</small></span>
             <table border="1">
@@ -291,17 +299,17 @@
                     <td class="td-class" style="width:8%">Net Amortization</td>
                     <td class="td-class" style="width:8%">Downpayment</td>
                     <td class="td-class" style="width:8%">Term (Month)</td>
-                   
+
                 </tr>
                 <tr id="tb2">
-                    <td class="td-class" style="width:8%">{{ $decodedData[0]->approved_price}}</td>
+                    <td class="td-class" style="width:8%">{{ formatToMoney($decodedData[0]->approved_price) }}</td>
                     <td class="td-class" style="width:8%">{{ $decodedData[0]->rate}} %</td>
                     <td class="td-class" style="width:8%">{{ $decodedData[0]->rebate}}</td>
-                    <td class="td-class" style="width:8%">{{ $decodedData[0]->monthly_amo}}</td>
+                    <td class="td-class" style="width:8%">{{ formatToMoney($decodedData[0]->monthly_amo) }}</td>
                     <td class="td-class" style="width:8%">{{ ($decodedData[0]->monthly_amo - $decodedData[0]->rebate) }}</td>
-                    <td class="td-class" style="width:8%">{{ $decodedData[0]->dp}}</td>
+                    <td class="td-class" style="width:8%">{{ formatToMoney($decodedData[0]->dp) }}</td>
                     <td class="td-class" style="width:8%">{{ $decodedData[0]->terms}}</td>
-                   
+
                 </tr>
             </table>
             <br />
@@ -317,20 +325,35 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td >JOEMAR A. VALENCIA</td>
-                        <td >{{ $decodedData[0]->date_approved}}</td>
-                        <td >{{ $decodedData[0]->approved_price}}</td>
-                        <td ></td>
-                        
-                    </tr>
-                    <tr>
-                        <td >RANDY C. TORRES</td>
-                        <td >{{ $decodedData[0]->date_approved}}</td>
-                        <td >{{ $decodedData[0]->approved_price}}</td>
-                        <td ></td>
-                      
-                    </tr>
+                    @if (count($decodeHistory) > 0)
+                        @for ($i = 0; $i < count($decodeHistory); $i++)
+                            <tr>
+                                <td>{{ $decodeHistory[$i]->fullname }}</td>
+                                <td>{{ $decodeHistory[$i]->date_approved }}</td>
+                                <td>{{ formatToMoney($decodeHistory[$i]->appraised_price) }}</td>
+                                <td>{{ $decodeHistory[$i]->remarks }}</td>
+                            </tr>
+                        @endfor
+                    @else
+                        <tr>
+                            <td ></td>
+                            <td ></td>
+                            <td ></td>
+                            <td ></td>
+                        </tr>
+                        <tr>
+                            <td ></td>
+                            <td ></td>
+                            <td ></td>
+                            <td ></td>
+                        </tr>
+                        <tr>
+                            <td ></td>
+                            <td ></td>
+                            <td ></td>
+                            <td ></td>
+                        </tr>
+                    @endif
             </tbody>
             </table>
 
