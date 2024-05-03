@@ -628,7 +628,7 @@
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="">1</td>
-				<td class="" colspan="22"> Sell the unit (as in) with the appraised value of- </td>
+				<td class="" colspan="22"> Sell the unit (as is) with the appraised value of- </td>
                 <?php
                     $appraisal_value = $decodedData[0]->has_appraised == 'true' ? formatToMoney($decodedData[0]->approved_appraised_price + $decodedData[0]->total_cost_parts) : '';
                 ?>

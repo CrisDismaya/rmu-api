@@ -116,6 +116,7 @@ class RequestRefurbishController extends BaseController
 				->select('b.*', 'a.price', 'a.id as received_ids')
 				->where('recieve_id', $received_id)
 				->where('is_deleted', '=', '0')
+				->where('refurb_decision', '!=', 'done')
 				->get();
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
@@ -152,6 +153,7 @@ class RequestRefurbishController extends BaseController
 				->leftjoin("spare_parts as parts", "received_parts.parts_id", "parts.id")
 				->select("received_parts.id as received_ids", "received_parts.price", "parts.name", "parts.id")
 				->where('received.repo_id', '=', $repo_id)
+                ->where('refurb_decision', '!=', 'done')
 				->get();
 
 			// $get_spare_missing = DB::table('refurbish_details as a')

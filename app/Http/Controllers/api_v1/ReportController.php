@@ -82,7 +82,7 @@ class ReportController extends BaseController
                         )
                     ) AS fullname,
                     FORMAT(history.date_approved, 'MMM dd, yyyy') AS date_approved,
-                    appraise.remarks
+                    history.remarks
                 FROM repo_details repo
                 LEFT JOIN request_approvals appraise ON repo.id = appraise.repo_id
                 LEFT JOIN appraisal_histories history ON appraise.id = history.appraisal_req_id
@@ -140,12 +140,20 @@ class ReportController extends BaseController
                             FROM request_approvals
                             WHERE status = 1
                             GROUP BY branch, repo_id, approved_price
-                        ) appraise ON rep.id = appraise.repo_id and rep.branch_id = appraise.branch
+                        ) appraise ON rep.id = appraise.repo_id
                         LEFT JOIN (
-                            SELECT recieve_id, SUM(actual_price) AS total_cost_parts
-                            FROM recieve_unit_spare_parts
-                            WHERE is_deleted = 0 and refurb_decision = 'done'
-                            GROUP BY recieve_id
+                            SELECT
+                                received.id AS recieve_id, SUM(parts.actual_price) AS total_cost_parts
+                            FROM recieve_unit_details received
+                            INNER JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
+                            LEFT JOIN (
+                                SELECT
+                                    request.repo_id, settle.status
+                                FROM request_refurbishes request
+                                INNER JOIN refurbish_processes settle ON request.id = settle.refurbish_req_id
+                            ) refurbish ON received.repo_id = refurbish.repo_id
+                            WHERE refurbish.status = 1
+                            GROUP BY received.id
                         ) parts ON bb.id = parts.recieve_id
 						WHERE rep.id = :recid",
 				$param
