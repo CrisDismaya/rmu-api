@@ -128,19 +128,19 @@ class RequestApprovalController extends BaseController
                             WHEN appraise.approved_price IS NULL THEN (
                                 CASE
                                     WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
-                                        THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
+                                        THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
                                     WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
-                                        THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
+                                        THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
                                     WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
-                                        THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
+                                        THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
                                     WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
-                                        THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
+                                        THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                                 ELSE 0 END
                             )
-                            ELSE appraise.approved_price + ISNULL(parts.total_cost_parts, 0)
+                            ELSE appraise.approved_price
                         END AS current_price
                     ')
                 )
@@ -269,19 +269,19 @@ class RequestApprovalController extends BaseController
 
                     DB::raw('DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month'),
                     DB::raw('
-                        ISNULL(appraise.appraised_price + ISNULL(parts.total_cost_parts, 0),
+                        ISNULL(appraise.appraised_price,
                             CASE
                                 WHEN DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), repo.date_surrender) >= 1 AND DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), repo.date_surrender) <= 6
-                                    THEN repo.original_srp + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .05))
+                                    THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .05))
 
                                 WHEN DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), repo.date_surrender) >= 7 AND DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), repo.date_surrender) <= 12
-                                    THEN repo.original_srp + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .10))
+                                    THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .10))
 
                                 WHEN DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), repo.date_surrender) >= 13 AND DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), repo.date_surrender) <= 24
-                                    THEN repo.original_srp + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .15))
+                                    THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .15))
 
                                 WHEN DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), repo.date_surrender) >= 25
-                                    THEN repo.original_srp + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .20))
+                                    THEN repo.original_srp - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp * .20))
                                 ELSE 0
                             END
                         ) AS current_price
@@ -471,66 +471,190 @@ class RequestApprovalController extends BaseController
     {
         try {
 
-            $condition = '';
+            // $condition = '';
+
+            // if (Auth::user()->userrole == 'Warehouse Custodian') {
+            //     $condition = " WHERE received.is_sold = 'N' AND received.status != 4 AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+            //         and not exists  (select repo_id from sold_units where repo_id = repo.id
+            //         AND branch ='" . Auth::user()->branch . "')
+            //         and not exists  (select repo_id from request_refurbishes where repo_id = repo.id and status in (0,1,3)
+            //         AND branch ='" . Auth::user()->branch . "')
+            //         AND not exists (Select c.repo_id from stock_transfer_approval as a
+            //         inner join stock_transfer_unit as b on b.stock_transfer_id = a.id
+            //         inner join recieve_unit_details as c on c.id = b.recieved_unit_id
+            //         where a.status = 0 and c.repo_id = repo.id)
+            //         AND repo.branch_id ='" . Auth::user()->branch . "'";
+            // } else {
+            //     $condition = " WHERE received.is_sold = 'N' AND received.status != 4 AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+            //     and not exists  (select repo_id from sold_units where repo_id = repo.id)
+            //     and not exists  (select repo_id from request_refurbishes where repo_id = repo.id and status in (0,1,3))
+            //     AND not exists (Select c.repo_id from stock_transfer_approval as a
+            //     inner join stock_transfer_unit as b on b.stock_transfer_id = a.id
+            //     inner join recieve_unit_details as c on c.id = b.recieved_unit_id
+            //     where a.status = 0 and c.repo_id = repo.id)";
+            // }
+
+
+            // $received_units = DB::select(
+            //     "SELECT distinct
+            //     repo.id as repo_id,repo.msuisva_form_no as msuisva,repo.model_engine, repo.model_chassis,repo.branch_id
+            //     ,branches.name as branchname,brands.brandname,model.model_name,color.name as color,
+            //     CONCAT(old_owner.firstname,' ',old_owner.middlename,' ',old_owner.lastname) as ex_owner,
+            //     old_owner.firstname as o_firstname, old_owner.middlename as o_middlename,old_owner.lastname as o_lastname,repo.created_at as date_received
+            //     ,repo.original_srp,case when req.approved_price is null then received.principal_balance ELSE req.approved_price END current_appraised,DATEDIFF(DAY,(CONVERT(DATE,repo.date_surrender)),GETDATE()) as aging,
+            //    received.is_sold
+            // from repo_details as repo
+            // inner join (select max(id) id,model_engine,model_chassis from repo_details group by model_chassis,model_engine) as latest on latest.id = repo.id
+            // inner join recieve_unit_details as received on received.repo_id = repo.id
+            // left join (select a.repo_id,a.approved_price from request_approvals as a
+            // inner join
+            // (
+            // select max(id) id,repo_id from request_approvals group by repo_id
+            // ) as max_request on max_request.id = a.id) as req on req.repo_id = repo.id
+            // inner join branches on branches.id = repo.branch_id
+            // inner join  brands on brands.id = repo.brand_id
+            // inner join unit_models as model on model.id = repo.model_id
+            // inner join unit_colors as color on color.id = repo.color_id
+            // inner join customer_profile as old_owner on old_owner.id = repo.customer_acumatica_id
+            // left join (
+            //     SELECT
+            //         repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
+            //     FROM repo_details repo
+            //     LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
+            //     INNER JOIN (
+            //         SELECT * FROM files WHERE isRequired = 1 AND status = 1
+            //     ) files ON upload.files_id = files.id
+            //     WHERE upload.is_deleted = 0
+            //     GROUP BY repo.id, upload.branch_id
+            // ) files ON repo.id = files.repo_id
+            // " . $condition
+            // );
+
+
+            $query = "SELECT
+                    repo.id AS repo_id,
+                    repo.msuisva_form_no AS msuisva,
+                    repo.model_engine,
+                    repo.model_chassis,
+                    repo.branch_id,
+                    branch.name AS branchname,
+                    brand.brandname,
+                    model.model_name,
+                    color.name AS color,
+                    UPPER(
+                        CONCAT(customer.firstname,
+                            CASE
+                                WHEN customer.middlename != '' THEN CONCAT(' ', customer.middlename, ' ')
+                            ELSE ' ' END, customer.lastname
+                        )
+                    ) AS ex_owner,
+                    customer.firstname AS o_firstname,
+                    customer.middlename AS o_middlename,
+                    customer.lastname AS o_lastname,
+                    repo.created_at AS date_received,
+                    repo.original_srp,
+                    CASE
+                        WHEN appraise.approved_price IS NULL THEN (
+                            CASE
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
+
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
+
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
+
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
+                            ELSE 0 END
+                        )
+                        ELSE appraise.approved_price
+                    END AS current_appraised,
+                    --CASE
+                    --	WHEN req.approved_price IS NULL THEN received.principal_balance
+                    --	ELSE req.approved_price
+                    --END AS current_appraised,
+                    DATEDIFF(DAY, CONVERT(DATE, repo.date_surrender), GETDATE()) AS aging,
+                    received.is_sold,
+                    files.total_upload_required_files
+                FROM repo_details repo
+                INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
+                LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
+                LEFT JOIN brands brand ON repo.brand_id = brand.id
+                LEFT JOIN unit_models model ON repo.model_id = model.id
+                LEFT JOIN unit_colors color ON repo.color_id = color.id
+                LEFT JOIN branches branch ON repo.branch_id = branch.id
+                LEFT JOIN (
+                    SELECT
+                        repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
+                    FROM repo_details repo
+                    LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
+                    INNER JOIN (
+                        SELECT * FROM files WHERE isRequired = 1 AND status = 1
+                    ) files ON upload.files_id = files.id
+                    WHERE upload.is_deleted = 0
+                    GROUP BY repo.id, upload.branch_id
+                ) files ON repo.id = files.repo_id
+                LEFT JOIN (
+                    SELECT req.branch, req.repo_id, req.approved_price
+                    FROM (
+                        SELECT MAX(id) as latest_id, repo_id
+                        FROM request_approvals
+                        WHERE status = 1
+                        GROUP BY repo_id
+                    ) sub
+                    INNER JOIN request_approvals req ON sub.latest_id = req.id
+                ) appraise ON repo.id = appraise.repo_id
+                LEFT JOIN (
+                    SELECT rud.repo_id, SUM(price) total_parts_price
+                    FROM recieve_unit_details rud
+                    LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
+                    WHERE rus.is_deleted = 0 and (rus.refurb_decision IS NULL OR rus.refurb_decision = 'na')
+                    GROUP BY rud.repo_id
+                ) AS total_parts ON total_parts.repo_id = repo.id
+                WHERE received.is_sold = 'N'
+                AND received.status != 4
+                AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+
+            ";
 
             if (Auth::user()->userrole == 'Warehouse Custodian') {
-                $condition = " WHERE received.is_sold = 'N' AND received.status != 4 AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
-                    and not exists  (select repo_id from sold_units where repo_id = repo.id
-                    AND branch ='" . Auth::user()->branch . "')
-                    and not exists  (select repo_id from request_refurbishes where repo_id = repo.id and status in (0,1,3)
-                    AND branch ='" . Auth::user()->branch . "')
-                    AND not exists (Select c.repo_id from stock_transfer_approval as a
-                    inner join stock_transfer_unit as b on b.stock_transfer_id = a.id
-                    inner join recieve_unit_details as c on c.id = b.recieved_unit_id
-                    where a.status = 0 and c.repo_id = repo.id)
-                    AND repo.branch_id ='" . Auth::user()->branch . "'";
+                $condition = "
+                    AND NOT EXISTS (
+                        SELECT repo_id FROM sold_units WHERE repo_id = repo.id AND branch = '". Auth::user()->branch ."'
+                    )
+                    AND NOT EXISTS (
+                        SELECT repo_id FROM request_refurbishes WHERE repo_id = repo.id AND status IN (0,1,3) AND branch = '". Auth::user()->branch ."'
+                    )
+                    AND NOT EXISTS (
+                        SELECT
+                            c.repo_id FROM stock_transfer_approval AS a
+                        INNER JOIN stock_transfer_unit AS b ON b.stock_transfer_id = a.id
+                        INNER JOIN recieve_unit_details AS c ON c.id = b.recieved_unit_id
+                        WHERE a.status = 0 AND c.repo_id = repo.id AND repo.branch_id = '". Auth::user()->branch ."'
+                    )
+                ";
             } else {
-                $condition = " WHERE received.is_sold = 'N' AND received.status != 4 AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
-                and not exists  (select repo_id from sold_units where repo_id = repo.id)
-                and not exists  (select repo_id from request_refurbishes where repo_id = repo.id and status in (0,1,3))
-                AND not exists (Select c.repo_id from stock_transfer_approval as a
-                inner join stock_transfer_unit as b on b.stock_transfer_id = a.id
-                inner join recieve_unit_details as c on c.id = b.recieved_unit_id
-                where a.status = 0 and c.repo_id = repo.id)";
+                $condition = "
+                    AND NOT EXISTS (
+                        SELECT repo_id FROM sold_units WHERE repo_id = repo.id
+                    )
+                    AND NOT EXISTS (
+                        SELECT repo_id FROM request_refurbishes WHERE repo_id = repo.id AND status IN (0, 1, 3)
+                    )
+                    AND NOT EXISTS (
+                        SELECT
+                            c.repo_id FROM stock_transfer_approval AS a
+                        INNER JOIN stock_transfer_unit AS b ON b.stock_transfer_id = a.id
+                        INNER JOIN recieve_unit_details AS c ON c.id = b.recieved_unit_id
+                        WHERE a.status = 0 AND c.repo_id = repo.id
+                    )
+                ";
             }
 
 
-            $received_units = DB::select(
-                "SELECT distinct
-                repo.id as repo_id,repo.msuisva_form_no as msuisva,repo.model_engine, repo.model_chassis,repo.branch_id
-                ,branches.name as branchname,brands.brandname,model.model_name,color.name as color,
-                CONCAT(old_owner.firstname,' ',old_owner.middlename,' ',old_owner.lastname) as ex_owner,
-                old_owner.firstname as o_firstname, old_owner.middlename as o_middlename,old_owner.lastname as o_lastname,repo.created_at as date_received
-                ,repo.original_srp,case when req.approved_price is null then received.principal_balance ELSE req.approved_price END current_appraised,DATEDIFF(DAY,(CONVERT(DATE,repo.date_surrender)),GETDATE()) as aging,
-               received.is_sold
-            from repo_details as repo
-            inner join (select max(id) id,model_engine,model_chassis from repo_details group by model_chassis,model_engine) as latest on latest.id = repo.id
-            inner join recieve_unit_details as received on received.repo_id = repo.id
-            left join (select a.repo_id,a.approved_price from request_approvals as a
-                            inner join
-                            (
-                            select max(id) id,repo_id from request_approvals group by repo_id
-                            ) as max_request on max_request.id = a.id) as req on req.repo_id = repo.id
-            inner join branches on branches.id = repo.branch_id
-            inner join  brands on brands.id = repo.brand_id
-            inner join unit_models as model on model.id = repo.model_id
-            inner join unit_colors as color on color.id = repo.color_id
-            inner join customer_profile as old_owner on old_owner.id = repo.customer_acumatica_id
-            left join (
-                SELECT
-                    repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
-                FROM repo_details repo
-                LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
-                INNER JOIN (
-                    SELECT * FROM files WHERE isRequired = 1 AND status = 1
-                ) files ON upload.files_id = files.id
-                WHERE upload.is_deleted = 0
-                GROUP BY repo.id, upload.branch_id
-            ) files ON repo.id = files.repo_id
-            " . $condition
-            );
-
-            return $received_units;
+            return DB::select($query.$condition);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -560,19 +684,19 @@ class RequestApprovalController extends BaseController
                         WHEN appraise.approved_price IS NULL THEN (
                             CASE
                                 WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
-                                    THEN (repo.original_srp) + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
                                 WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
-                                    THEN (repo.original_srp) + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
                                 WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
-                                    THEN (repo.original_srp) + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
                                 WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
-                                    THEN (repo.original_srp) + ISNULL(parts.total_cost_parts, 0) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
+                                    THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                             ELSE 0 END
                         )
-                        ELSE appraise.approved_price + ISNULL(parts.total_cost_parts, 0)
+                        ELSE appraise.approved_price
                     END AS current_price,
                     req.approved_price,
                     DATEDIFF(DAY, (CONVERT(DATE, repo.date_surrender)), GETDATE()) AS aging, qty.quantity,
@@ -587,7 +711,8 @@ class RequestApprovalController extends BaseController
                         WHEN refurbish.status = 3 THEN 'ONGOING REFURBISH'
                         ELSE 'AVAILABLE'
                     END AS status,
-                    received.is_sold
+                    received.is_sold,
+                    parts.total_cost_parts
                 FROM repo_details AS repo
                 --INNER JOIN (
                 --    SELECT MAX(id) AS id, model_engine, model_chassis

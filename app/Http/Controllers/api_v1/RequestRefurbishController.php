@@ -116,30 +116,47 @@ class RequestRefurbishController extends BaseController
 				->select('b.*', 'a.price', 'a.id as received_ids')
 				->where('recieve_id', $received_id)
 				->where('is_deleted', '=', '0')
-				->where('refurb_decision', '!=', 'done')
+                ->whereNull('refurb_decision')->orWhere('refurb_decision', '!=', 'done')
 				->get();
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
 	}
 
-	public function getPartsForRefurbish($received_id)
+	public function getPartsForRefurbish(Request $request)
 	{
 
 		try {
-
 			// $get_spare_missing = DB::table('refurbish_details as a')
 			// 	->join('spare_parts as b', 'b.id', 'a.spare_parts')
 			// 	->select('b.*', 'a.price', 'a.actual_price', 'a.id as record_id', 'a.status')
 			// 	->where('a.refurbish_id', $received_id)->get();
 			// return $get_spare_missing;
 
-			return DB::table('recieve_unit_spare_parts as a')
-				->join('spare_parts as b', 'b.id', 'a.parts_id')
-				->select('b.*', 'a.price', 'a.id as record_id', 'a.actual_price', DB::raw("ISNULL(refurb_decision, '') AS status"))
-				->where('recieve_id', $received_id)
-				->where('is_deleted', '=', '0')
-				->get();
+            $stmt = DB::table('recieve_unit_spare_parts as a')
+                ->leftjoin('spare_parts as b', 'b.id', 'a.parts_id')
+                ->select('b.*', 'a.price', 'a.id as record_id', 'a.actual_price', DB::raw("ISNULL(refurb_decision, '') AS status"))
+                ->where('a.recieve_id', '=', $request->received_id)
+                ->where('a.is_deleted', '=', '0');
+
+            if($request->fetch_id == 0){
+                $stmt->where(function($query) {
+                    $query->whereNull('refurb_decision')
+                            ->orWhere('refurb_decision', '!=', 'done');
+                });
+            } else {
+                $stmt->where('refurb_id', '=', $request->fetch_id);
+            }
+
+            return $stmt->get();
+
+			// return DB::table('recieve_unit_spare_parts as a')
+			// 	->join('spare_parts as b', 'b.id', 'a.parts_id')
+			// 	->select('b.*', 'a.price', 'a.id as record_id', 'a.actual_price', DB::raw("ISNULL(refurb_decision, '') AS status"))
+			// 	->where('recieve_id', $request->received_id)
+			// 	->where('is_deleted', '=', '0')
+            //     // ->whereNull('refurb_decision')->orWhere('refurb_decision', '!=', 'done')
+			// 	->get();
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -153,7 +170,7 @@ class RequestRefurbishController extends BaseController
 				->leftjoin("spare_parts as parts", "received_parts.parts_id", "parts.id")
 				->select("received_parts.id as received_ids", "received_parts.price", "parts.name", "parts.id")
 				->where('received.repo_id', '=', $repo_id)
-                ->where('refurb_decision', '!=', 'done')
+                ->whereNull('refurb_decision')->orWhere('refurb_decision', '!=', 'done')
 				->get();
 
 			// $get_spare_missing = DB::table('refurbish_details as a')
@@ -325,6 +342,7 @@ class RequestRefurbishController extends BaseController
 					->update([
 						'actual_price' => (double) $parts['actual_price'],
 						'refurb_decision' => $parts['status'],
+						'refurb_id' => $parts['status'] == 'done' ? $request->refurbish_id : null ,
 					]);
 			}
 

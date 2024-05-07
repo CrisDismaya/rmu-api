@@ -156,7 +156,7 @@
 <body>
 	<?php
 		$dataExtract = $data['datas'];
-		$decodedData = json_decode($dataExtract);
+		$info = json_decode($dataExtract);
 
 		$partsExtract = $data['parts'];
 		$decodedParts = json_decode($partsExtract);
@@ -216,11 +216,11 @@
 			<tr>
 				<td class="text-bold" colspan="6"> Name of Company </td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="19">{{ $decodedData[0]->company_name }}</td>
+				<td class="border-bottom" colspan="19">{{ $info[0]->company }}</td>
 				<td class="" colspan="3"></td>
 				<td class="text-bold" colspan="4"> MUISVA No. </td>
 				<td class="text-center text-bold"> : </td>
-				<td class="border-bottom text-center text-danger" colspan="6">{{ $decodedData[0]->muisva_no }}</td>
+				<td class="border-bottom text-center text-danger" colspan="6">{{ $info[0]->muisva_number }}</td>
 			</tr>
 			<tr><td class="tr-space-1" colspan="40"></td></tr>
 			<tr>
@@ -242,12 +242,12 @@
 			<tr>
 				<td class="" colspan="12">Dealer's Store</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="27">{{ $decodedData[0]->dealer_store }}</td>
+				<td class="border-bottom" colspan="27">{{ $info[0]->branch }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="12">Originating Financing Store</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="27">{{ $decodedData[0]->originating_financing_store }}</td>
+				<td class="border-bottom" colspan="27">{{ $info[0]->originating_financing_store }}</td>
 			</tr>
 			<tr>
 				<td class=""> I </td>
@@ -262,18 +262,18 @@
 				<td class="text-center" colspan="">1</td>
 				<td class="" colspan="10">Latest Borrower's Name</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->latest_borrower_name }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->exOwner_Borrower }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Original Owner</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->original_owner }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->original_owner }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan="">2</td>
 				<td class="" colspan="10">Address</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="27">{{ $decodedData[0]->address }}</td>
+				<td class="border-bottom" colspan="27">{{ $info[0]->address }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan=""></td>
@@ -285,41 +285,41 @@
 				<td class="" colspan="3"></td>
 				<td class="" colspan="9">Folder No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->folder_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->loan_number }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Loan Amount</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom text-right text-amount" colspan="10">{{ formatToMoney($decodedData[0]->loan_amount) }}</td>
+				<td class="border-bottom text-right text-amount" colspan="10">{{ formatToMoney($info[0]->original_loan_amount) }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="9">Date Granted</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->date_granted }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->date_released }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Total Payment</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom text-right text-amount" colspan="10">{{ formatToMoney($decodedData[0]->total_payment) }}</td>
+				<td class="border-bottom text-right text-amount" colspan="10">{{ formatToMoney($info[0]->total_payments) }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="9">Last date of payment</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->late_date_of_payment }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->last_date_payments }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Principal Balance</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom text-right text-amount" colspan="10">{{ formatToMoney($decodedData[0]->principal_balance) }}</td>
+				<td class="border-bottom text-right text-amount" colspan="10">{{ formatToMoney($info[0]->outstanding_loan_balance) }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="23"></td>
 				{{-- <td class="" colspan="9">Date Due</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->date_due }}</td> --}}
+				<td class="border-bottom" colspan="10">{{ $info[0]->date_due }}</td> --}}
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Repo Date</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->repo_date }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->date_repossessed }}</td>
 			</tr>
 			<tr>
 				<td class=""> II </td>
@@ -333,41 +333,41 @@
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Brand</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->brand }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->brand }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Model</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->model }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->model }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Engine No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->engine_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->engine_number }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Chassis No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->chassis_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->chassis_number }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">MV File Number</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->mv_file_number }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->mv_file_number }}</td>
 				<td class="" colspan="1"></td>
 				<td class="" colspan="5">Year Model</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->year_model }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->year_model }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Plate No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->plate_no }}</td>
+				<td class="border-bottom" colspan="10">{{ $info[0]->plate_number }}</td>
 				<td class="" colspan="17"></td>
 				{{-- <td class="" colspan="5">BR / ARV No.</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $decodedData[0]->br_or_arv_no }}</td> --}}
+				<td class="border-bottom" colspan="10">{{ $info[0]->br_or_arv_no }}</td> --}}
 			</tr>
 			<tr>
 				<td class=""> III </td>
@@ -381,23 +381,23 @@
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Classification</td>
 				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'A' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification == 'A' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Class A</td>
 				<td class="" colspan=""></td>
 
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'B' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification == 'B' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Class B</td>
 				<td class="" colspan=""></td>
 
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'C' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification == 'C' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Class C</td>
 				<td class="" colspan=""></td>
 
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'D' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification == 'D' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Class D</td>
 				<td class="" colspan=""></td>
 
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification == 'E' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification == 'E' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="3">Class E</td>
 				<td class="" colspan="2"></td>
 			</tr>
@@ -406,35 +406,35 @@
 				<td class="" colspan="10">Complete / Incomplete Documents</td>
 				<td class="" colspan="2"></td>
 
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_document_tag == 'CD' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_document_tag == 'CD' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="12">Complete Documents</td>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_document_tag == 'ID' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_document_tag == 'ID' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Incomplete Documents</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2" rowspan="3"></td>
 				<td class="" colspan="10" rowspan="3" valign="top">Description</td>
 				<td class="" colspan="2" rowspan="3"></td>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'GOOD AS NEW REPOSSESSED UNIT' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'GOOD AS NEW REPOSSESSED UNIT' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Good as new repossessed unit</td>
 				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'MINIMAL REPAIR OF REFURBISHMENT' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'MINIMAL REPAIR OF REFURBISHMENT' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Minimal repair and refurbishment</td>
 				<td class="" colspan="2"></td>
 			</tr>
 			<tr>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'MAJOR REPAIR AND REFURBISHMENT' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'MAJOR REPAIR AND REFURBISHMENT' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Major repair and refurbishment</td>
 				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'CANNIBALIZED' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'CANNIBALIZED' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Cannibalized</td>
 				<td class="" colspan="2"></td>
 			</tr>
 			<tr>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'MEET AN ACCIDENT' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'MEET AN ACCIDENT' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Involved in an accident</td>
 				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $decodedData[0]->classification_description == 'TOTALLY WRECKED' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'TOTALLY WRECKED' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Totally wrecked</td>
 				<td class="" colspan="2"></td>
 			</tr>
@@ -526,13 +526,13 @@
 				<td class="" colspan="2"></td>
 				<td class="" colspan="12"> Original Selling Price </td>
 				<td class="" colspan="18"></td>
-				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($decodedData[0]->original_srp) }}</td>
+				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($info[0]->original_srp) }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="12"> Less : Missing and Damaged Parts </td>
 				<td class="" colspan="18"></td>
-				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($decodedData[0]->original_srp - $total_missing_and_damaged_parts) }}</td>
+				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($info[0]->original_srp - $total_missing_and_damaged_parts) }}</td>
 			</tr> --}}
 			<tr>
 				<td class="" colspan="4"></td>
@@ -541,7 +541,7 @@
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="11"> 1st to 6th months </td>
-				<td class="border-bottom" colspan="2"><div class="{{ ($decodedData[0]->standard_matrix_month >= 1 && $decodedData[0]->standard_matrix_month <= 6) ? 'check' : ''  }}"></div></td>
+				<td class="border-bottom" colspan="2"><div class="{{ ($info[0]->standard_matrix_month >= 1 && $info[0]->standard_matrix_month <= 6) ? 'check' : ''  }}"></div></td>
 				<td class="" colspan="3"> Months </td>
 				<td class="" colspan=""></td>
 				{{-- <td class="border-bottom" colspan="3"></td>
@@ -550,7 +550,7 @@
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="11"> 7th to 12th months </td>
-				<td class="border-bottom" colspan="2"><div class="{{ ($decodedData[0]->standard_matrix_month >= 7 && $decodedData[0]->standard_matrix_month <= 12) ? 'check' : ''  }}"></div></td>
+				<td class="border-bottom" colspan="2"><div class="{{ ($info[0]->standard_matrix_month >= 7 && $info[0]->standard_matrix_month <= 12) ? 'check' : ''  }}"></div></td>
 				<td class="" colspan="3"> Months </td>
 				<td class="" colspan=""></td>
 				{{-- <td class="border-bottom" colspan="3"></td>
@@ -559,7 +559,7 @@
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="11"> 13th to 24th months </td>
-				<td class="border-bottom" colspan="2"><div class="{{ ($decodedData[0]->standard_matrix_month >= 13 && $decodedData[0]->standard_matrix_month <= 24) ? 'check' : ''  }}"></div></td>
+				<td class="border-bottom" colspan="2"><div class="{{ ($info[0]->standard_matrix_month >= 13 && $info[0]->standard_matrix_month <= 24) ? 'check' : ''  }}"></div></td>
 				<td class="" colspan="3"> Months </td>
 				<td class="" colspan=""></td>
 				{{-- <td class="border-bottom" colspan="3"></td>
@@ -568,7 +568,7 @@
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="11"> 25th to Current Date </td>
-				<td class="border-bottom" colspan="2"><div class="{{ $decodedData[0]->standard_matrix_month >= 25 ? 'check' : ''  }}"></div></td>
+				<td class="border-bottom" colspan="2"><div class="{{ $info[0]->standard_matrix_month >= 25 ? 'check' : ''  }}"></div></td>
 				<td class="" colspan="3"> Months </td>
 				<td class="" colspan=""></td>
 				{{-- <td class="border-bottom" colspan="3"></td>
@@ -579,22 +579,22 @@
 				<td class="" colspan="30"> Total Depreciation </td>
                 <?php
                     $rate = 0;
-                    if($decodedData[0]->standard_matrix_month >= 1 && $decodedData[0]->standard_matrix_month <= 6){
+                    if($info[0]->standard_matrix_month >= 1 && $info[0]->standard_matrix_month <= 6){
                         $rate = .05;
                     }
-                    else if($decodedData[0]->standard_matrix_month >= 7 && $decodedData[0]->standard_matrix_month <= 12){
+                    else if($info[0]->standard_matrix_month >= 7 && $info[0]->standard_matrix_month <= 12){
                         $rate = .10;
                     }
-                    else if($decodedData[0]->standard_matrix_month >= 13 && $decodedData[0]->standard_matrix_month <= 24){
+                    else if($info[0]->standard_matrix_month >= 13 && $info[0]->standard_matrix_month <= 24){
                         $rate = .15;
                     }
                     else{
                         $rate = .20;
                     }
 
-                    $total_depreciation = $decodedData[0]->original_srp * $rate;
-                    $total_smv = $decodedData[0]->original_srp - ($total_missing_and_damaged_parts + $total_depreciation) +
-                            ($decodedData[0]->has_appraised != 'true' ? $decodedData[0]->total_cost_parts : 0)
+                    $total_depreciation = $info[0]->original_selling_price * $rate;
+                    $total_smv = $info[0]->original_selling_price - ($total_missing_and_damaged_parts + $total_depreciation)
+                            // + ($info[0]->has_appraised != 'true' ? $info[0]->total_cost_parts : 0)
                 ?>
 				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($total_depreciation) }}</td>
 			</tr>
@@ -602,7 +602,7 @@
 				<td class="" colspan="2"></td>
 				<td class="" colspan="30"> Added Cost - Refubishment </td>
 				<td class="border-bottom text-right text-amount" colspan="8" style="border-bottom: 2px double black;">
-                    {{ formatToMoney($decodedData[0]->total_cost_parts) }}
+                    {{ formatToMoney($info[0]->total_cost_parts) }}
                 </td>
 			</tr>
 			<tr>
@@ -621,18 +621,18 @@
 				<td class="" colspan="11">
 					<span style="font-size: 11px; font-style: italic;"> </span>
 				</td>
-				<td class="" colspan="7"> Cash Basis </td>
+				<td class="" colspan="7"> Date Approved </td>
 				<td class="" colspan=""></td>
-				<td class="" colspan="7"> Installment Basis </td>
+				<td class="" colspan="7"> Cash/Installment Basis </td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="">1</td>
 				<td class="" colspan="22"> Sell the unit (as is) with the appraised value of- </td>
                 <?php
-                    $appraisal_value = $decodedData[0]->has_appraised == 'true' ? formatToMoney($decodedData[0]->approved_appraised_price + $decodedData[0]->total_cost_parts) : '';
+                    $appraisal_value = $info[0]->has_appraised == 'true' ? formatToMoney($info[0]->approved_appraised_price + $info[0]->total_cost_parts) : '';
                 ?>
-				<td class="border-bottom text-right text-amount" colspan="7">{{ $appraisal_value }}</td>
+				<td class="border-bottom" colspan="7">{{ $info[0]->appraise_date_approved }}</td>
 				<td class="" colspan=""></td>
 				<td class="border-bottom text-right text-amount" colspan="7">{{ $appraisal_value }}</td>
 			</tr>

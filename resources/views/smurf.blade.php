@@ -179,8 +179,8 @@
         $dataExtract = $data['datas'];
         $info = json_decode($dataExtract);
 
-        // $dataHistory = $data['history'];
-        // $decodeHistory = json_decode($dataHistory);
+        $partsExtract = $data['refurbish'];
+		$parts = json_decode($partsExtract);
 
         function formatToMoney($number) {
             return number_format($number, 2, '.', ',');
@@ -245,7 +245,7 @@
                         Unit 13, 2nd Floor Beacon Commercila Place, Apollo 3, Moonwalk Village, Las Piñas City <br>
                         Email and Contact Number: tafi@transasiaticfin.ph / 0919-074-3252
                     </span> <br><br>
-                    <span class="text-bold" style="font-size: 19px"> ROPA DISPOSAL APPROVAL FORM (RDAF) </span>
+                    <span class="text-bold" style="font-size: 19px"> SURRENDERED MOTORCYCLE UNIT REFURBISHMENT FORM (SMURF) </span>
                 </td>
                 <td class="" colspan="2" rowspan="100"></td>
             </tr>
@@ -272,87 +272,89 @@
                 </td>
                 <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->exOwner_Borrower }} </td>
             </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Loan No. </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->loan_number }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Date Released </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->date_released }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Date Repossessed </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->date_repossessed }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Brand </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->brand }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Model </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->model }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Engine# </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->engine_number }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Chassis# </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->chassis_number }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Original Selling Price </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->original_selling_price) }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Original Loan Amount </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->original_loan_amount) }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Outstanding Loan Balanace </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->outstanding_loan_balance) }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Total Payments </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->total_payments) }} </td>
-            </tr>
-            <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Last Date of Payments </span>
-                </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->last_date_payments }} </td>
-            </tr>
             <tr><td style="padding: 20px;" colspan="36"></td></tr>
             <tr>
-                <td colspan="36"><span class="text-bold"> BRANCH/DEALER RECOMMENDATION: </span></td>
+                <td class="text-left" colspan="16">
+                    <span class="text-bold"> PARTS </span>
+                </td>
+                <td colspan="2"></td>
+                <td class="text-center" colspan="8">
+                    <span class="text-bold"> STATUS </span>
+                </td>
+                <td colspan="2"></td>
+                <td class="text-center" colspan="8">
+                    <span class="text-bold"> COST </span>
+                </td>
+            </tr>
+
+            <?php $total_missing_and_damaged_parts = 0; ?>
+			@if (count($parts) > 0)
+				@for ($i = 0; $i < count($parts); $i++)
+                    <tr>
+                        <td class="border-bottom text-left" colspan="16" style="padding: 10px 10px">
+                            <span class="text-bold"> {{ $parts[$i]->parts_name }} </span>
+                        </td>
+                        <td colspan="2"></td>
+                        <td class="border-bottom text-center" colspan="8" style="padding: 10px 10px">
+                            <span class="text-bold"> {{ $parts[$i]->parts_status }} </span>
+                        </td>
+                        <td colspan="2"></td>
+                        <td class="border-bottom text-right " colspan="8" style="padding: 10px 10px">
+                            <span class="text-bold"> {{ formatToMoney($parts[$i]->parts_price) }} </span>
+                        </td>
+                    </tr>
+                    <?php $total_missing_and_damaged_parts = $total_missing_and_damaged_parts + $parts[$i]->parts_price; ?>
+				@endfor
+			@else
+                <tr>
+                    <td class="border-bottom text-left" colspan="16" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                    <td colspan="2"></td>
+                    <td class="border-bottom text-center" colspan="8" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                    <td colspan="2"></td>
+                    <td class="border-bottom text-right " colspan="8" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="border-bottom text-left" colspan="16" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                    <td colspan="2"></td>
+                    <td class="border-bottom text-center" colspan="8" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                    <td colspan="2"></td>
+                    <td class="border-bottom text-right " colspan="8" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="border-bottom text-left" colspan="16" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                    <td colspan="2"></td>
+                    <td class="border-bottom text-center" colspan="8" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                    <td colspan="2"></td>
+                    <td class="border-bottom text-right " colspan="8" style="padding: 10px 10px">
+                        <span class="text-bold"> &nbsp; </span>
+                    </td>
+                </tr>
+            @endif
+            <tr><td style="padding: 20px;" colspan="36"></td></tr>
+            <tr>
+                <td colspan="36"><span class="text-bold"> ADDED COST: </span></td>
             </tr>
             <tr>
                 <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Proposed Price </span>
+                    <span style="font-size: 12px;"> Total </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->approved_appraised_price) }} </td>
+                <td class="text-right border-col" colspan="24" style="padding: 10px 20px"> {{ formatToMoney($total_missing_and_damaged_parts) }} </td>
             </tr>
             <tr><td style="padding: 20px;" colspan="36"></td></tr>
             <tr>

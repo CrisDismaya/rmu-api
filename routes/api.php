@@ -164,7 +164,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('refurbishUnitList', [RequestRefurbishController::class, 'refurbishUnitList']);
 			Route::get('listOfForRefurbish', [RequestRefurbishController::class, 'listOfForRefurbish']);
 			Route::get('getMissingDamageParts/{received_id}', [RequestRefurbishController::class, 'getMissingDamageParts']);
-			Route::get('getPartsForRefurbish/{received_id}', [RequestRefurbishController::class, 'getPartsForRefurbish']);
+			Route::get('getPartsForRefurbish', [RequestRefurbishController::class, 'getPartsForRefurbish']);
 			Route::get('getRefurbishPartsTotalCost/{repo_id}', [RequestRefurbishController::class, 'getRefurbishPartsTotalCost']);
 			Route::post('requestRefurbish', [RequestRefurbishController::class, 'requestRefurbish']);
 			Route::post('updateRefurbish/{id}', [RequestRefurbishController::class, 'updateRefurbish']);

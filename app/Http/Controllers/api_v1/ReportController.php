@@ -13,181 +13,179 @@ class ReportController extends BaseController
 	public function generateReport($formType, $recordId, $src)
 	{
 
-		$param = ['recid' => $recordId];
+		$parameter = [
+            'recid' => $recordId
+        ];
 
-		if ($formType == 'RDAF') {
-			$query = DB::select(
-				'SELECT
-                    brh.name as branch,
-                    CONCAT(cus.firstname, cus.middlename, cus.lastname) as customer,
-                    cus.address,
-                    cus.nationality,
-                    cus.source_of_income,
-                    cus.marital_status,
-                    cus.date_birth,
-                    cus.birth_place,
-                    cus.primary_id,
-                    cus.primary_id_no,
-                    cus.alternative_id,
-                    cus.alternative_id_no,
-                    mdl.model_name as model,
-                    brd.brandname as brand,
-                    repo.model_engine as engine,
-                    repo.model_chassis as chassis,
-                    rud.total_payments as total_payment,
-                    repo.original_srp as srp,
-                    rud.loan_amount,
-                    rud.principal_balance,
-                    sld.monthly_amo,
-                    sld.rebate,
-                    sld.terms,
-                    sld.dp,
-                    sld.rate,
-                    loc.name as financing_store,
-                    repo.loan_number,
-                    repo.odo_meter,
-                    repo.date_surrender,
-                    repo.date_sold,
-                    appraise.approved_price,
-                    repo.id as repo_id
-                FROM recieve_unit_details rud
-                INNER JOIN repo_details repo ON rud.repo_id = repo.id
-                LEFT JOIN customer_profile cus ON repo.customer_acumatica_id = cus.id
-                LEFT JOIN brands brd ON repo.brand_id = brd.id
-                LEFT JOIN unit_models mdl ON repo.model_id = mdl.id
-                LEFT JOIN users usr ON rud.approver = usr.id
-                LEFT JOIN branches brh ON repo.branch_id = brh.id
-                LEFT JOIN locations loc ON repo.location = loc.id
-                LEFT JOIN (
-                    SELECT MAX(id) as latest_id, branch, repo_id, approved_price
+        $stmt = DB::select(
+            "SELECT
+                UPPER('SUERTE MOTOPLAZA') AS company,
+                FORMAT(GETDATE(), 'MMM dd, yyyy') AS today,
+                UPPER(branch.name) AS branch,
+                UPPER(
+                    CONCAT(customer.firstname,
+                        CASE
+                            WHEN customer.middlename != '' THEN CONCAT(' ', customer.middlename, ' ')
+                        ELSE ' ' END, customer.lastname
+                    )
+                ) AS exOwner_Borrower,
+                UPPER(repo.loan_number) AS loan_number,
+                FORMAT(repo.date_sold, 'MMM dd, yyyy') AS date_released,
+                FORMAT(repo.date_surrender, 'MMM dd, yyyy') AS date_repossessed,
+                UPPER(brand.brandname) AS brand,
+                UPPER(model.model_name) AS model,
+                UPPER(repo.model_engine) AS engine_number,
+                UPPER(repo.model_chassis) AS chassis_number,
+                repo.original_srp AS original_selling_price,
+                received.loan_amount AS original_loan_amount,
+                received.principal_balance AS outstanding_loan_balance,
+                received.total_payments AS total_payments,
+                CASE
+                    WHEN repo.last_payment = '1900-01-01' THEN ''
+                    ELSE FORMAT(repo.last_payment, 'MMM dd, yyyy')
+                END AS last_date_payments,
+                UPPER(repo.msuisva_form_no) AS muisva_number,
+                'TRANS ASIATIC FINANCE INCORPORATED' AS originating_financing_store,
+                UPPER(received.original_owner) AS original_owner,
+                UPPER(TRIM(CONCAT(customer.address,' ',barangay.Title,', ',city.Title,', ',province.Title))) AS [address],
+                UPPER(repo.mv_file_number) AS mv_file_number,
+                repo.year_model AS year_model,
+                UPPER(repo.plate_number) AS plate_number,
+                UPPER(repo.classification) AS [classification],
+                UPPER(repo.unit_documents) AS classification_document_tag,
+                UPPER(repo.unit_description) AS classification_description,
+                DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month,
+                ISNULL(parts.total_cost_parts, 0) AS total_cost_parts,
+                CASE
+                    WHEN appraise.approved_price IS NOT NULL THEN 'true'
+                    ELSE 'false'
+                END AS has_appraised,
+                appraise.approved_price AS approved_appraised_price,
+                FORMAT(appraise.date_approved, 'MMM dd, yyyy') AS appraise_date_approved
+            FROM repo_details repo
+            INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
+            LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
+            LEFT JOIN brands brand ON repo.brand_id = brand.id
+            LEFT JOIN unit_models model ON repo.model_id = model.id
+            LEFT JOIN unit_colors color ON repo.color_id = color.id
+            LEFT JOIN province province ON customer.provinces = province.OrderNumber
+            LEFT JOIN city city ON customer.cities = city.MappingId
+            LEFT JOIN barangay barangay ON customer.barangays = barangay.OrderNumber
+            LEFT JOIN branches branch ON repo.branch_id = branch.id
+            LEFT JOIN locations [location] ON repo.[location] = [location].id
+            LEFT JOIN (
+                SELECT req.branch, req.repo_id, req.approved_price, req.date_approved
+                FROM (
+                    SELECT MAX(id) as latest_id, repo_id
                     FROM request_approvals
                     WHERE status = 1
-                    GROUP BY branch, repo_id, approved_price
-                ) appraise ON appraise.repo_id = repo.id AND appraise.branch = repo.branch_id
-                LEFT JOIN sold_units sld ON repo.id = sld.repo_id
-                WHERE repo.id = :recid',
-				$param
-			);
+                    GROUP BY repo_id
+                ) sub
+                INNER JOIN request_approvals req ON sub.latest_id = req.id
+            ) appraise ON repo.id = appraise.repo_id
+            LEFT JOIN (
+                SELECT
+                    received.id AS recieve_id, SUM(parts.actual_price) AS total_cost_parts
+                FROM recieve_unit_details received
+                INNER JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
+                LEFT JOIN (
+                    SELECT
+                        request.repo_id, settle.status
+                    FROM request_refurbishes request
+                    INNER JOIN refurbish_processes settle ON request.id = settle.refurbish_req_id
+                ) refurbish ON received.repo_id = refurbish.repo_id
+                WHERE refurbish.status = 1
+                GROUP BY received.id
+            ) parts ON received.id = parts.recieve_id
+            WHERE repo.id = :recid",
+            $parameter
+        );
 
-            $parts = [];
+        $parts = DB::select(
+            "SELECT
+                spares.[name] AS parts_name, parts.parts_status,
+                CASE
+                    WHEN parts.actual_price != 0 OR parts.actual_price != null THEN parts.actual_price
+                    ELSE parts.price
+                END AS parts_price,
+                parts.refurb_decision
+            FROM repo_details repo
+            INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
+            INNER JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
+            LEFT JOIN spare_parts spares ON parts.parts_id = spares.id
+            WHERE parts.is_deleted = 0 AND (parts.refurb_decision = 'na' OR parts.refurb_decision IS NULL)
+            AND repo.id = :recid",
+            $parameter
+        );
 
-			$history =  DB::select(
-                "SELECT
-                    history.appraised_price,
-                    UPPER(
-                        CONCAT(usrs.firstname,
-                            CASE
-                                WHEN usrs.middlename != '' THEN CONCAT(' ', usrs.middlename, ' ')
-                            ELSE ' ' END, usrs.lastname
-                        )
-                    ) AS fullname,
-                    FORMAT(history.date_approved, 'MMM dd, yyyy') AS date_approved,
-                    history.remarks
-                FROM repo_details repo
-                LEFT JOIN request_approvals appraise ON repo.id = appraise.repo_id
-                LEFT JOIN appraisal_histories history ON appraise.id = history.appraisal_req_id
-                LEFT JOIN users usrs ON history.approver = usrs.id
-                WHERE repo.id = :recid AND appraise.status = 1
-                ORDER BY history.created_at",
-                $param
-            );
-		} else {
-			$query = DB::select(
-				"SELECT
-							'SUERTE MOTOPLAZA' AS company_name,
-							UPPER(rep.msuisva_form_no) AS muisva_no, brh.name AS dealer_store, 'TRANS ASIATIC FINANCE INCORPORATED' AS originating_financing_store,
-							UPPER(CONCAT(cus.firstname,' ',cus.middlename,' ',cus.lastname)) AS latest_borrower_name,
-							UPPER(bb.original_owner) AS original_owner,
-							UPPER(CONCAT(cus.address,' ',brgy.Title,', ',cty.Title,', ',prv.Title)) AS [address],
-							UPPER(rep.loan_number) AS folder_no,
-							bb.loan_amount AS loan_amount,
-							FORMAT(rep.date_sold, 'MMM dd, yyyy') AS date_granted,
-							bb.total_payments AS total_payment,
-							'' AS date_due,
-                            -- rep.original_srp,
-	                        appraise.approved_price AS approved_appraised_price,
-							CASE WHEN appraise.approved_price IS NOT NULL THEN 'true' ELSE 'false' END AS has_appraised,
-                            rep.original_srp AS original_srp,
-                            ISNULL(total_cost_parts, 0) AS total_cost_parts,
-							-- (rep.original_srp - bb.total_payments) AS principal_balance,
-							bb.principal_balance AS principal_balance,
-							FORMAT(rep.last_payment, 'MMM dd, yyyy') AS late_date_of_payment,
-							FORMAT(rep.date_surrender, 'MMM dd, yyyy') AS repo_date,
-							brd.brandname AS brand,
-							mdl.model_name AS model,
-							UPPER(rep.model_engine) AS engine_no,
-							UPPER(rep.model_chassis) AS chassis_no,
-							rep.mv_file_number AS mv_file_number,
-							rep.year_model AS year_model,
-							UPPER(rep.plate_number) AS plate_no,
-							'' AS br_or_arv_no,
-							UPPER(rep.classification) AS [classification],
-							UPPER(rep.unit_documents) AS classification_document_tag,
-							UPPER(rep.unit_description) AS classification_description,
-                            DATEDIFF(MONTH, (CONVERT(DATE, rep.date_sold)), rep.date_surrender) AS standard_matrix_month
-						FROM repo_details rep
-						LEFT JOIN branches brh ON rep.branch_id = brh.id
-						inner join recieve_unit_details as bb on bb.repo_id = rep.id
-						LEFT JOIN customer_profile cus ON rep.customer_acumatica_id = cus.id
-						LEFT JOIN brands brd ON rep.brand_id = brd.id
-						LEFT JOIN unit_models mdl ON rep.model_id = mdl.id
-						LEFT JOIN unit_colors clr ON rep.color_id = clr.id
-						LEFT JOIN province prv ON cus.provinces = prv.OrderNumber
-						LEFT JOIN city cty ON cus.cities = cty.MappingId
-						LEFT JOIN barangay brgy ON cus.barangays = brgy.OrderNumber
-                        LEFT JOIN (
-                            SELECT MAX(id) as latest_id, branch, repo_id, approved_price
-                            FROM request_approvals
-                            WHERE status = 1
-                            GROUP BY branch, repo_id, approved_price
-                        ) appraise ON rep.id = appraise.repo_id
-                        LEFT JOIN (
-                            SELECT
-                                received.id AS recieve_id, SUM(parts.actual_price) AS total_cost_parts
-                            FROM recieve_unit_details received
-                            INNER JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
-                            LEFT JOIN (
-                                SELECT
-                                    request.repo_id, settle.status
-                                FROM request_refurbishes request
-                                INNER JOIN refurbish_processes settle ON request.id = settle.refurbish_req_id
-                            ) refurbish ON received.repo_id = refurbish.repo_id
-                            WHERE refurbish.status = 1
-                            GROUP BY received.id
-                        ) parts ON bb.id = parts.recieve_id
-						WHERE rep.id = :recid",
-				$param
-			);
+        $history =  DB::select(
+            "SELECT
+                history.appraised_price,
+                UPPER(
+                    CONCAT(usrs.firstname,
+                        CASE
+                            WHEN usrs.middlename != '' THEN CONCAT(' ', usrs.middlename, ' ')
+                        ELSE ' ' END, usrs.lastname
+                    )
+                ) AS fullname,
+                FORMAT(history.date_approved, 'MMM dd, yyyy') AS date_approved,
+                history.remarks
+            FROM repo_details repo
+            LEFT JOIN request_approvals appraise ON repo.id = appraise.repo_id
+            LEFT JOIN appraisal_histories history ON appraise.id = history.appraisal_req_id
+            LEFT JOIN users usrs ON history.approver = usrs.id
+            WHERE repo.id = :recid AND appraise.status = 1
+            ORDER BY history.created_at",
+            $parameter
+        );
 
-			$parts = DB::select(
-				"SELECT
-						spares.[name] AS parts_name, parts.parts_status, CASE WHEN parts.actual_price != 0 OR parts.actual_price != null THEN parts.actual_price ELSE parts.price END AS parts_price
-					FROM repo_details repo
-					INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
-					INNER JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
-					LEFT JOIN spare_parts spares ON parts.parts_id = spares.id
-					WHERE parts.is_deleted = 0 AND (parts.refurb_decision = 'na' OR parts.refurb_decision IS NULL)
-					AND repo.id = :recid",
-				$param
-			);
+        $refurbish = DB::select(
+            "SELECT
+                spares.[name] AS parts_name, parts.parts_status,
+                CASE
+                    WHEN parts.actual_price != 0 OR parts.actual_price != null THEN parts.actual_price
+                    ELSE parts.price
+                END AS parts_price,
+                parts.refurb_decision
+            FROM repo_details repo
+            INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
+            INNER JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
+            LEFT JOIN spare_parts spares ON parts.parts_id = spares.id
+            WHERE parts.is_deleted = 0 AND parts.refurb_decision = 'done'
+            AND repo.id = :recid",
+            $parameter
+        );
 
-            $history = [];
-		}
-		// dd($query);
+        switch (strtoupper($formType)) {
+            case 'MUISVA':
+                $pdf_file = "muisva";
+                $pdf_title = "Motorcycle Unit Insection and Immediate Sales Value Approval Form";
+            break;
+
+            case 'RDAF':
+                $pdf_file = "rdaf";
+                $pdf_title = "ROPA DISPOSAL APPROVAL FORM";
+            break;
+
+            case 'SMURF':
+                $pdf_file = "smurf";
+                $pdf_title = "SURRENDERED MOTORCYCLE UNIT REFURBISHMENT FORM";
+            break;
+        }
 
 		$pdf = PDF::loadView(
-			($formType == 'RDAF' ? 'rdaf' : 'muisva'),
+            $pdf_file,
 			array(
-				'Title' =>  $formType,
+				'Title' =>  $pdf_title,
 				'data' => array(
-					'datas' => json_encode($query),
+					'datas' => json_encode($stmt),
 					'parts' => json_encode($parts),
 					'history' => json_encode($history),
-					'report_src' => $src
+					'refurbish' => json_encode($refurbish)
 				)
 			)
 		)
-			->setPaper('legal', ($formType == 'RDAF' ? 'landscape' : 'portrait'));
+        ->setPaper('legal', 'portrait');
 
 		return $pdf->stream();
 	}
