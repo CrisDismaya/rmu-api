@@ -182,6 +182,9 @@
         $partsExtract = $data['refurbish'];
 		$parts = json_decode($partsExtract);
 
+        $dataHistory = $data['smurf_approver'];
+        $approver = json_decode($dataHistory);
+
         function formatToMoney($number) {
             return number_format($number, 2, '.', ',');
         }
@@ -362,23 +365,39 @@
                     <span class="text-bold"> DECISION </span>
                 </td>
                 <td class="text-center" colspan="12">
-                    <span class="text-bold"> APPROVED PRICE </span>
+                    <span class="text-bold"> REMARKS </span>
                 </td>
                 <td class="text-center" colspan="12">
                     <span class="text-bold"> DATE APPROVED </span>
                 </td>
             </tr>
-            <tr>
-                <td class=" text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Proposed Price </span>
-                </td>
-                <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Proposed Price </span>
-                </td>
-                <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
-                    <span style="font-size: 12px;"> Proposed Price </span>
-                </td>
-            </tr>
+            @if (count($approver) > 0)
+				@for ($i = 0; $i < count($approver); $i++)
+                    <tr>
+                        <td class=" text-bold border-col" style="padding: 10px 10px" colspan="12">
+                            <span style="font-size: 12px;"> {{ $approver[$i]->fullname }} </span>
+                        </td>
+                        <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                            <span style="font-size: 12px;"> {{ $approver[$i]->remarks }} </span>
+                        </td>
+                        <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                            <span style="font-size: 12px;"> {{ $approver[$i]->date_approved }} </span>
+                        </td>
+                    </tr>
+                @endfor
+			@else
+                <tr>
+                    <td class=" text-bold border-col" style="padding: 10px 10px" colspan="12">
+                        <span style="font-size: 12px;"> &nbsp; </span>
+                    </td>
+                    <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                        <span style="font-size: 12px;"> &nbsp; </span>
+                    </td>
+                    <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                        <span style="font-size: 12px;"> &nbsp; </span>
+                    </td>
+                </tr>
+            @endif
         </table>
     </div>
 </body>

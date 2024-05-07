@@ -17,6 +17,7 @@ class ReportController extends BaseController
             'recid' => $recordId
         ];
 
+        // muisva
         $stmt = DB::select(
             "SELECT
                 UPPER('SUERTE MOTOPLAZA') AS company,
@@ -118,7 +119,8 @@ class ReportController extends BaseController
             $parameter
         );
 
-        $history =  DB::select(
+        // rdaf
+        $rdaf_approver =  DB::select(
             "SELECT
                 history.appraised_price,
                 UPPER(
@@ -139,6 +141,7 @@ class ReportController extends BaseController
             $parameter
         );
 
+        // smurf
         $refurbish = DB::select(
             "SELECT
                 spares.[name] AS parts_name, parts.parts_status,
@@ -153,6 +156,30 @@ class ReportController extends BaseController
             LEFT JOIN spare_parts spares ON parts.parts_id = spares.id
             WHERE parts.is_deleted = 0 AND parts.refurb_decision = 'done'
             AND repo.id = :recid",
+            $parameter
+        );
+
+        $smurf_approver =  DB::select(
+            "SELECT
+                UPPER(
+                    CONCAT(usrs.firstname,
+                        CASE
+                            WHEN usrs.middlename != '' THEN CONCAT(' ', usrs.middlename, ' ')
+                        ELSE ' ' END, usrs.lastname
+                    )
+                ) AS fullname,
+                settle.remarks,
+                FORMAT(settle.updated_at, 'MMM dd, yyyy') AS date_approved
+            FROM request_refurbishes refurbish
+            INNER JOIN (
+                SELECT
+                    MAX(req.id) AS latest_id, repo_id
+                FROM request_refurbishes req
+                GROUP BY repo_id
+            ) latest_request ON refurbish.id = latest_request.latest_id
+            INNER JOIN refurbish_processes settle ON refurbish.id = settle.refurbish_req_id
+            LEFT JOIN users usrs ON settle.approver = usrs.id
+            WHERE refurbish.repo_id = :recid",
             $parameter
         );
 
@@ -180,8 +207,9 @@ class ReportController extends BaseController
 				'data' => array(
 					'datas' => json_encode($stmt),
 					'parts' => json_encode($parts),
-					'history' => json_encode($history),
-					'refurbish' => json_encode($refurbish)
+					'refurbish' => json_encode($refurbish),
+					'rdaf_approver' => json_encode($rdaf_approver),
+					'smurf_approver' => json_encode($smurf_approver),
 				)
 			)
 		)
