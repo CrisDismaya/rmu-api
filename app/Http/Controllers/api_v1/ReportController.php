@@ -35,8 +35,10 @@ class ReportController extends BaseController
                 FORMAT(repo.date_surrender, 'MMM dd, yyyy') AS date_repossessed,
                 UPPER(brand.brandname) AS brand,
                 UPPER(model.model_name) AS model,
+                UPPER(color.name) AS color,
                 UPPER(repo.model_engine) AS engine_number,
                 UPPER(repo.model_chassis) AS chassis_number,
+                UPPER(color.name) AS color,
                 repo.original_srp AS original_selling_price,
                 received.loan_amount AS original_loan_amount,
                 received.principal_balance AS outstanding_loan_balance,
@@ -62,7 +64,10 @@ class ReportController extends BaseController
                     ELSE 'false'
                 END AS has_appraised,
                 appraise.approved_price AS approved_appraised_price,
-                FORMAT(appraise.date_approved, 'MMM dd, yyyy') AS appraise_date_approved
+                FORMAT(appraise.date_approved, 'MMM dd, yyyy') AS appraise_date_approved,
+                UPPER(sold.buyer) AS buyer,
+                UPPER(sold.address) AS buyer_address,
+                UPPER(sold.sold_approver) AS buyer_approver
             FROM repo_details repo
             INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
             LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
@@ -98,6 +103,32 @@ class ReportController extends BaseController
                 WHERE refurbish.status = 1
                 GROUP BY received.id
             ) parts ON received.id = parts.recieve_id
+            LEFT JOIN (
+                SELECT
+                    sold.repo_id,
+                    UPPER(
+                        CONCAT(customer.firstname,
+                            CASE
+                                WHEN customer.middlename != '' THEN CONCAT(' ', customer.middlename, ' ')
+                            ELSE ' ' END, customer.lastname
+                        )
+                    ) AS buyer,
+                    UPPER(TRIM(CONCAT(customer.address,' ',barangay.Title,', ',city.Title,', ',province.Title))) AS [address],
+                    UPPER(
+                        CONCAT(users.firstname,
+                            CASE
+                                WHEN users.middlename != '' THEN CONCAT(' ', users.middlename, ' ')
+                            ELSE ' ' END, users.lastname
+                        )
+                    ) AS sold_approver
+                FROM sold_units sold
+                LEFT JOIN customer_profile customer ON sold.new_customer = customer.id
+                LEFT JOIN province province ON customer.provinces = province.OrderNumber
+                LEFT JOIN city city ON customer.cities = city.MappingId
+                LEFT JOIN barangay barangay ON customer.barangays = barangay.OrderNumber
+                LEFT JOIN users users ON sold.approver = users.id
+                WHERE sold.status = 1
+            ) sold ON repo.id = sold.repo_id
             WHERE repo.id = :recid",
             $parameter
         );
@@ -183,6 +214,8 @@ class ReportController extends BaseController
             $parameter
         );
 
+        // sold
+
         switch (strtoupper($formType)) {
             case 'MUISVA':
                 $pdf_file = "muisva";
@@ -198,6 +231,11 @@ class ReportController extends BaseController
                 $pdf_file = "smurf";
                 $pdf_title = "SURRENDERED MOTORCYCLE UNIT REFURBISHMENT FORM";
             break;
+
+            case 'SOLD':
+                $pdf_file = "sold";
+                $pdf_title = "DELIVERY RECEIPT";
+            break;
         }
 
 		$pdf = PDF::loadView(
@@ -209,7 +247,7 @@ class ReportController extends BaseController
 					'parts' => json_encode($parts),
 					'refurbish' => json_encode($refurbish),
 					'rdaf_approver' => json_encode($rdaf_approver),
-					'smurf_approver' => json_encode($smurf_approver),
+					'smurf_approver' => json_encode($smurf_approver)
 				)
 			)
 		)

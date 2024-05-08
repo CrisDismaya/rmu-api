@@ -634,6 +634,7 @@ class RequestApprovalController extends BaseController
                         INNER JOIN recieve_unit_details AS c ON c.id = b.recieved_unit_id
                         WHERE a.status = 0 AND c.repo_id = repo.id AND repo.branch_id = '". Auth::user()->branch ."'
                     )
+                    AND repo.branch_id = '". Auth::user()->branch ."'
                 ";
             } else {
                 $condition = "
@@ -660,19 +661,12 @@ class RequestApprovalController extends BaseController
         }
     }
 
-    public function UnitInventoryMasterList()
+    public function UnitInventoryMasterList(Request $request)
     {
-
         try {
 
-            $condition = '';
-
-            if (Auth::user()->userrole == 'Warehouse Custodian') {
-                $condition = " AND repo.branch_id ='" . Auth::user()->branch . "'AND [transfer].approvalid != 1";
-            }
-
             $received_units = DB::select(
-                "DECLARE @role Nvarchar(100) = :userrole, @branchid Int = :branchid;
+                "DECLARE @role Nvarchar(100) = :userrole, @branchid Int = :branchid, @request Nvarchar(10) = :request;
                 SELECT distinct
                     repo.id AS repo_id, repo.msuisva_form_no AS msuisva, repo.model_engine, repo.model_chassis, repo.branch_id,
                     branches.name AS branchname, brands.brandname, model.model_name, color.name AS color, location.name AS location,
@@ -807,9 +801,10 @@ class RequestApprovalController extends BaseController
                 WHERE received.is_sold = 'N' AND received.status != 4 AND repo.branch_id = ISNULL([transfer].current_branch, repo.branch_id)
                 AND (
                     (@role = 'Warehouse Custodian' AND repo.branch_id = @branchid) OR
-                    (@role != 'Warehouse Custodian')
+                    (@role != 'Warehouse Custodian' AND @request != 0 AND repo.branch_id = @request) OR
+                    (@role != 'Warehouse Custodian' AND @request = 0)
                 )",
-                ['userrole' => Auth::user()->userrole, 'branchid' => Auth::user()->branch]
+                ['userrole' => Auth::user()->userrole, 'branchid' => Auth::user()->branch, 'request' => $request->branchId ]
             );
 
             return ['data' => $received_units, 'role' => Auth::user()->userrole];
@@ -1321,8 +1316,8 @@ class RequestApprovalController extends BaseController
 
                     // $boolean = $this->create_customer($request->id);
                     // if ($boolean) {
-                    //     receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
-                    //     sold_unit::where('id', $request->id)->update(['status' => $request->status]);
+                        receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
+                        sold_unit::where('id', $request->id)->update(['status' => $request->status]);
                     // }
                 }
                 $sequence = $fetch_sequence;
