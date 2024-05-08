@@ -126,7 +126,7 @@ class ReportController extends BaseController
                 LEFT JOIN province province ON customer.provinces = province.OrderNumber
                 LEFT JOIN city city ON customer.cities = city.MappingId
                 LEFT JOIN barangay barangay ON customer.barangays = barangay.OrderNumber
-                LEFT JOIN users users ON sold.approver = users.id
+                LEFT JOIN users users ON sold.maker = users.id
                 WHERE sold.status = 1
             ) sold ON repo.id = sold.repo_id
             WHERE repo.id = :recid",
@@ -168,7 +168,7 @@ class ReportController extends BaseController
             LEFT JOIN appraisal_histories history ON appraise.id = history.appraisal_req_id
             LEFT JOIN users usrs ON history.approver = usrs.id
             WHERE repo.id = :recid AND appraise.status = 1
-            ORDER BY history.created_at",
+            ORDER BY history.created_at DESC",
             $parameter
         );
 

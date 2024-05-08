@@ -690,7 +690,7 @@ class RequestApprovalController extends BaseController
                                     THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                             ELSE 0 END
                         )
-                        ELSE appraise.approved_price
+                        ELSE appraise.approved_price + ISNULL(parts.total_cost_parts, 0)
                     END AS current_price,
                     req.approved_price,
                     DATEDIFF(DAY, (CONVERT(DATE, repo.date_surrender)), GETDATE()) AS aging, qty.quantity,
@@ -1125,7 +1125,7 @@ class RequestApprovalController extends BaseController
                     $appraisal_log = new appraisal_history;
                     $appraisal_log->appraisal_req_id = $data->id;
                     $appraisal_log->old_price = $request->old_price;
-                    $appraisal_log->appraised_price = $data->approved_price;
+                    $appraisal_log->appraised_price = $request->approved_price;
                     $appraisal_log->date_approved = Carbon::now();
                     $appraisal_log->remarks = $request->remarks;
                     $appraisal_log->approver = Auth::user()->id;
