@@ -80,15 +80,17 @@ class ReportController extends BaseController
             LEFT JOIN branches branch ON repo.branch_id = branch.id
             LEFT JOIN locations [location] ON repo.[location] = [location].id
             LEFT JOIN (
-                SELECT req.branch, req.repo_id, req.approved_price, req.date_approved
+                SELECT sub.received_unit_id, history.appraised_price AS approved_price, history.created_at AS date_approved
                 FROM (
-                    SELECT MAX(id) as latest_id, repo_id
-                    FROM request_approvals
-                    WHERE status = 1
-                    GROUP BY repo_id
+                    SELECT
+                        request.received_unit_id, MAX(history.appraisal_req_id) AS appraisal_req_id
+                    FROM request_approvals request
+                    LEFT JOIN appraisal_histories history ON request.id = history.appraisal_req_id
+                    WHERE request.status = 1
+                    GROUP BY request.received_unit_id
                 ) sub
-                INNER JOIN request_approvals req ON sub.latest_id = req.id
-            ) appraise ON repo.id = appraise.repo_id
+                LEFT JOIN appraisal_histories history ON sub.appraisal_req_id = history.id
+            ) appraise ON received.id = appraise.received_unit_id
             LEFT JOIN (
                 SELECT
                     received.id AS recieve_id, SUM(parts.actual_price) AS total_cost_parts

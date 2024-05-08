@@ -158,7 +158,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('SoldMasterList', [RequestApprovalController::class, 'SoldUnitMasterList']);
 			Route::get('appraisedUnitList', [RequestApprovalController::class, 'appraisedUnitList']);
 			Route::get('getListForApproval/{moduleid}', [RequestApprovalController::class, 'getListForApproval']);
-			Route::get('UnitHistory/{engine}/{chassis}', [RequestApprovalController::class, 'UnitHistory']);
+			Route::get('UnitHistory/{repo_id}', [RequestApprovalController::class, 'UnitHistory']);
 
 			//Refurbish
 			Route::get('refurbishUnitList', [RequestRefurbishController::class, 'refurbishUnitList']);

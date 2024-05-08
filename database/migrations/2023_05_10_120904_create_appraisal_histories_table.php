@@ -16,6 +16,7 @@ class CreateAppraisalHistoriesTable extends Migration
         Schema::create('appraisal_histories', function (Blueprint $table) {
             $table->id();
             $table->BigInteger('appraisal_req_id');
+            $table->integer('branch')->nullable();
             $table->float('old_price')->nullable();
             $table->float('appraised_price')->nullable();
             $table->date('date_approved')->nullable();

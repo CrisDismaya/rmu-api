@@ -73,18 +73,18 @@ class RequestApprovalController extends BaseController
                 )
                 ->leftJoin(
                     DB::raw("(
-                        SELECT req.branch, req.repo_id, req.approved_price
+                        SELECT sub.received_unit_id, history.appraised_price AS approved_price
                         FROM (
-                            SELECT MAX(id) as latest_id, repo_id
-                            FROM request_approvals
-                            WHERE status = 1
-                            GROUP BY repo_id
+                            SELECT
+                                request.received_unit_id, MAX(history.appraisal_req_id) AS appraisal_req_id
+                            FROM request_approvals request
+                            LEFT JOIN appraisal_histories history ON request.id = history.appraisal_req_id
+                            WHERE request.status = 1
+                            GROUP BY request.received_unit_id
                         ) sub
-                        INNER JOIN request_approvals req ON sub.latest_id = req.id
-                    ) appraise"), function ($join) {
-                        $join->on('repo.id', '=', 'appraise.repo_id')
-                            ->on('repo.branch_id', '=', 'appraise.branch');
-                    }
+                        LEFT JOIN appraisal_histories history ON sub.appraisal_req_id = history.id
+                    ) appraise"),
+                    'rud.id', '=', 'appraise.received_unit_id'
                 )
                 ->leftJoin(
                     DB::raw("(
@@ -775,15 +775,17 @@ class RequestApprovalController extends BaseController
                     INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
                 ) AS [transfer] ON repo.id = [transfer].repoid
                 LEFT JOIN (
-                    SELECT req.branch, req.repo_id, req.approved_price
+                    SELECT sub.received_unit_id, history.appraised_price AS approved_price
                     FROM (
-                        SELECT MAX(id) as latest_id, repo_id
-                        FROM request_approvals
-                        WHERE status = 1
-                        GROUP BY repo_id
+                        SELECT
+                            request.received_unit_id, MAX(history.appraisal_req_id) AS appraisal_req_id
+                        FROM request_approvals request
+                        LEFT JOIN appraisal_histories history ON request.id = history.appraisal_req_id
+                        WHERE request.status = 1
+                        GROUP BY request.received_unit_id
                     ) sub
-                    INNER JOIN request_approvals req ON sub.latest_id = req.id
-                ) appraise ON repo.id = appraise.repo_id
+                    LEFT JOIN appraisal_histories history ON sub.appraisal_req_id = history.id
+                ) appraise ON received.id = appraise.received_unit_id
                 LEFT JOIN (
                     SELECT
                         received.id AS recieve_id, SUM(parts.actual_price) AS total_cost_parts
@@ -813,34 +815,84 @@ class RequestApprovalController extends BaseController
         }
     }
 
-    public function UnitHistory($engine, $chassis)
+    public function UnitHistory($repo_id)
     {
 
         try {
 
-            $unit_history =  DB::table('repo_details as repo')
-                ->join('branches as br', 'repo.branch_id', 'br.id')
-                ->join('brands as brd', 'repo.brand_id', 'brd.id')
-                ->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
-                ->join('unit_colors as color', 'repo.color_id', 'color.id')
-                ->join('customer_profile as old_owner', 'repo.customer_acumatica_id', 'old_owner.id')
-                ->select(
-                    'repo.model_engine',
-                    'repo.model_chassis',
-                    'repo.branch_id',
-                    'br.name as branchname',
-                    'brd.brandname',
-                    'mdl.model_name',
-                    'color.name as color',
-                    DB::raw("CONCAT(old_owner.firstname,' ',old_owner.middlename,' ',old_owner.lastname) as ex_owner"),
-                    'repo.date_sold',
-                    'repo.date_surrender'
-                )
-                ->where('repo.model_engine', $engine)
-                ->where('repo.model_chassis', $chassis)
-                ->get();
+            return DB::select(
+                "SELECT
+                    UPPER(branch.name) AS branch,
+                    UPPER(
+                        CONCAT(customer.firstname,
+                            CASE
+                                WHEN customer.middlename != '' THEN CONCAT(' ', customer.middlename, ' ')
+                            ELSE ' ' END, customer.lastname
+                        )
+                    ) AS exOwner,
+                    UPPER(brand.brandname) AS brand,
+                    UPPER(model.model_name) AS model,
+                    UPPER(repo.model_engine) AS engine,
+                    UPPER(repo.model_chassis) AS chassis,
+                    FORMAT(repo.created_at, 'MMM dd, yyyy') AS date_inserted,
+                    FORMAT(received.date_approved, 'MMM dd, yyyy') AS date_tagged,
+                    FORMAT(appraise.date_approved, 'MMM dd, yyyy') AS date_appraised,
+                    FORMAT(refurbish.updated_at, 'MMM dd, yyyy') AS date_refurbish,
+                    FORMAT([transfer].updated_at, 'MMM dd, yyyy') AS date_transfer,
+                    FORMAT(transfer_received.updated_at, 'MMM dd, yyyy') AS date_received
+                FROM repo_details repo
+                INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
+                LEFT JOIN branches branch ON repo.branch_id = branch.id
+                LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
+                LEFT JOIN brands brand ON repo.brand_id = brand.id
+                LEFT JOIN unit_models model ON repo.model_id = model.id
+                LEFT JOIN (
+                    SELECT sub.repo_id, history.appraised_price AS approved_price, history.created_at AS date_approved
+                    FROM (
+                        SELECT
+                            request.repo_id, MAX(history.appraisal_req_id) AS appraisal_req_id
+                        FROM request_approvals request
+                        LEFT JOIN appraisal_histories history ON request.id = history.appraisal_req_id
+                        WHERE request.status = 1
+                        GROUP BY request.repo_id
+                    ) sub
+                    LEFT JOIN appraisal_histories history ON sub.appraisal_req_id = history.id
+                ) AS appraise ON repo.id = appraise.repo_id
+                LEFT JOIN (
+                    SELECT sub.repo_id, settle.updated_at
+                    FROM (
+                        SELECT
+                            MAX(id) AS latest_id, repo_id
+                        FROM request_refurbishes
+                        WHERE status = 4
+                        GROUP BY repo_id
+                    ) sub
+                    LEFT JOIN refurbish_processes settle ON sub.latest_id = settle.refurbish_req_id
+                ) refurbish ON repo.id = refurbish.repo_id
+                LEFT JOIN (
+                    SELECT
+                        rud1.repo_id, sta1.id, sta1.updated_at
+                    FROM (
+                        SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
+                        FROM stock_transfer_approval sta
+                        INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
+                        GROUP BY stu.recieved_unit_id
+                    ) sub
+                    INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
+                    INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
+                    INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
+                    WHERE sta1.status = 1
+                ) [transfer] ON repo.id = [transfer].repo_id
+                LEFT JOIN (
+                    SELECT
+                        unit.id, received.repo_id, received.updated_at
+                    FROM stock_transfer_unit unit
+                    INNER JOIN recieve_unit_details received ON unit.recieved_unit_id = received.id
+                ) transfer_received ON repo.id = transfer_received.repo_id AND [transfer].id = transfer_received.id
+                WHERE repo.id = :repo_id",
+                [ 'repo_id' => $repo_id ]
+            );
 
-            return $unit_history;
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -937,17 +989,6 @@ class RequestApprovalController extends BaseController
                         GROUP BY rud.repo_id
                     ) AS parts"),
                     "parts.repo_id", "=", "repo.id"
-                )
-                ->leftJoin(
-                    DB::raw("(
-                        SELECT MAX(id) as latest_id, branch, repo_id, approved_price
-                        FROM request_approvals
-                        WHERE status = 1
-                        GROUP BY branch, repo_id, approved_price
-                    ) AS appraise"), function ($join) {
-                        $join->on('appraise.repo_id', '=', 'repo.id')
-                            ->on('appraise.branch', '=', 'repo.branch_id');
-                    }
                 )
                 ->where('rud.id', $id)
             ->first();
@@ -1124,6 +1165,7 @@ class RequestApprovalController extends BaseController
 
                     $appraisal_log = new appraisal_history;
                     $appraisal_log->appraisal_req_id = $data->id;
+                    $appraisal_log->branch = Auth::user()->branch;
                     $appraisal_log->old_price = $request->old_price;
                     $appraisal_log->appraised_price = $request->approved_price;
                     $appraisal_log->date_approved = Carbon::now();
@@ -1150,7 +1192,6 @@ class RequestApprovalController extends BaseController
             ];
 
             if ($request->edit_price) {
-                $arr['approved_price'] = $request->approved_price;
                 $arr['edited_price'] = $data->approved_price;
             }
 
