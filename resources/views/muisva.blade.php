@@ -226,7 +226,7 @@
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="text-center text-bold" colspan="36">
-					<span style="font-size: 16px; font-style: italic;"> Motorcycle Unit Insection and Immediate Sales Value Approval Form (MUISVA) </span>
+					<span style="font-size: 16px; font-style: italic;"> Motorcycle Unit Inspection and Immediate Sales Value Approval Form (MUISVA) </span>
 				</td>
 				<td class="" colspan="2"></td>
 			</tr>
@@ -594,7 +594,7 @@
 
                     $total_depreciation = $info[0]->original_selling_price * $rate;
                     $total_smv = $info[0]->original_selling_price - ($total_missing_and_damaged_parts + $total_depreciation)
-                            // + ($info[0]->has_appraised != 'true' ? $info[0]->total_cost_parts : 0)
+                            + ($info[0]->has_appraised != 'true' ? $info[0]->settled_total_cost : 0)
                 ?>
 				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($total_depreciation) }}</td>
 			</tr>
@@ -602,7 +602,7 @@
 				<td class="" colspan="2"></td>
 				<td class="" colspan="30"> Added Cost - Refubishment </td>
 				<td class="border-bottom text-right text-amount" colspan="8" style="border-bottom: 2px double black;">
-                    {{ formatToMoney($info[0]->total_cost_parts) }}
+                    {{ formatToMoney($info[0]->settled_total_cost) }}
                 </td>
 			</tr>
 			<tr>
@@ -630,7 +630,7 @@
 				<td class="" colspan="">1</td>
 				<td class="" colspan="22"> Sell the unit (as is) with the appraised value of- </td>
                 <?php
-                    $appraisal_value = $info[0]->has_appraised == 'true' ? formatToMoney($info[0]->approved_appraised_price + $info[0]->total_cost_parts) : '';
+                    $appraisal_value = $info[0]->has_appraised == 'true' ? formatToMoney($info[0]->approved_appraised_price + $info[0]->settled_total_cost) : '';
                 ?>
 				<td class="border-bottom" colspan="7">{{ $info[0]->appraise_date_approved }}</td>
 				<td class="" colspan=""></td>

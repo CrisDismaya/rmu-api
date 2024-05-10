@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\api_v1;
 
 use App\Http\Controllers\api_v1\BaseController as BaseController;
+use App\Http\Traits\resuableQuery;
 use Illuminate\Support\Facades\DB;
 use PDF;
 
 class ReportController extends BaseController
 {
 	//
+    use resuableQuery; //traits
 
 	public function generateReport($formType, $recordId, $src)
 	{
+        $cteQuery = $this->cteQuery();
 
 		$parameter = [
             'recid' => $recordId
@@ -19,7 +22,9 @@ class ReportController extends BaseController
 
         // muisva
         $stmt = DB::select(
-            "SELECT
+            "
+            {$cteQuery}
+            SELECT
                 UPPER('SUERTE MOTOPLAZA') AS company,
                 FORMAT(GETDATE(), 'MMM dd, yyyy') AS today,
                 UPPER(branch.name) AS branch,
@@ -67,7 +72,17 @@ class ReportController extends BaseController
                 FORMAT(appraise.date_approved, 'MMM dd, yyyy') AS appraise_date_approved,
                 UPPER(sold.buyer) AS buyer,
                 UPPER(sold.address) AS buyer_address,
-                UPPER(sold.sold_approver) AS buyer_approver
+                UPPER(sold.sold_approver) AS buyer_approver,
+                ISNULL((
+                    SELECT
+                        SUM(settled_total_cost) AS settled_total_cost
+                    FROM transactions
+                    WHERE repo_id = repo.id AND row_num > (
+                        SELECT row_num
+                        FROM transactions
+                        WHERE repo_id = repo.id AND source_process = 'appraisal'
+                    )
+                ), 0) AS settled_total_cost
             FROM repo_details repo
             INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
             LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
@@ -80,31 +95,37 @@ class ReportController extends BaseController
             LEFT JOIN branches branch ON repo.branch_id = branch.id
             LEFT JOIN locations [location] ON repo.[location] = [location].id
             LEFT JOIN (
-                SELECT sub.received_unit_id, history.appraised_price AS approved_price, history.created_at AS date_approved
+                SELECT
+                    request.received_unit_id,
+                    CASE
+                        WHEN request.approved_price = history.appraised_price THEN history.appraised_price
+                        ELSE request.approved_price
+                    END AS approved_price,
+                    history.created_at AS date_approved
                 FROM (
-                    SELECT
-                        request.received_unit_id, MAX(history.appraisal_req_id) AS appraisal_req_id
-                    FROM request_approvals request
-                    LEFT JOIN appraisal_histories history ON request.id = history.appraisal_req_id
-                    WHERE request.status = 1
-                    GROUP BY request.received_unit_id
+                    SELECT MAX(id) AS latest_id, repo_id
+                    FROM request_approvals
+                    GROUP BY repo_id
                 ) sub
-                LEFT JOIN appraisal_histories history ON sub.appraisal_req_id = history.id
+                INNER JOIN request_approvals request ON sub.latest_id = request.id
+                INNER JOIN appraisal_histories history ON request.id = history.appraisal_req_id
             ) appraise ON received.id = appraise.received_unit_id
             LEFT JOIN (
                 SELECT
-                    received.id AS recieve_id, SUM(parts.actual_price) AS total_cost_parts
-                FROM recieve_unit_details received
-                INNER JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
+                    request.repo_id,
+                    SUM(total_cost) AS total_cost_parts
+                FROM request_refurbishes request
+                LEFT JOIN refurbish_processes settle ON request.id = settle.refurbish_req_id
                 LEFT JOIN (
                     SELECT
-                        request.repo_id, settle.status
-                    FROM request_refurbishes request
-                    INNER JOIN refurbish_processes settle ON request.id = settle.refurbish_req_id
-                ) refurbish ON received.repo_id = refurbish.repo_id
-                WHERE refurbish.status = 1
-                GROUP BY received.id
-            ) parts ON received.id = parts.recieve_id
+                        refurb_id, SUM(actual_price) AS total_cost
+                    FROM recieve_unit_spare_parts
+                    WHERE refurb_id IS NOT NULL
+                    GROUP BY refurb_id
+                ) parts ON request.id = parts.refurb_id
+                WHERE settle.status = 1
+                GROUP BY request.repo_id
+            ) parts ON repo.id = parts.repo_id
             LEFT JOIN (
                 SELECT
                     sold.repo_id,
