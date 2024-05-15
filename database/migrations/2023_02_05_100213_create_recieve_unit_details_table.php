@@ -22,10 +22,11 @@ class CreateRecieveUnitDetailsTable extends Migration
             $table->enum('is_sold', ['Y','N'])->default('N');
             $table->enum('sold_type',['I','C'])->nullable();
             $table->string('loan_amount')->nullable();
-            $table->string('total_payments')->nullable();
             $table->string('principal_balance')->nullable();
+            $table->string('total_payments')->nullable();
             $table->string('is_certified_no_parts')->nullable();
             $table->string('original_owner');
+            $table->string('original_owner_id');
             $table->integer('approver')->nullable();
             $table->datetime('date_approved')->nullable();
             $table->timestamps();

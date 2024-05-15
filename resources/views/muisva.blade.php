@@ -92,6 +92,7 @@
 
 		table {
 			width: 100%;
+            border-collapse: collapse;
 		}
 
 		.table-bordered {
@@ -114,7 +115,7 @@
 
 		.text-amount { padding-right: 15px; }
 
-		.tr-space-1 { padding: 1px; }
+		.tr-space-1 { padding: 5px; }
 		.tr-space-2 { padding: 2px; }
 		.tr-space-3 { padding: 3px; }
 
@@ -157,6 +158,7 @@
 	<?php
 		$dataExtract = $data['datas'];
 		$info = json_decode($dataExtract);
+		$owners = json_decode($info[0]->owners, true);
 
 		$partsExtract = $data['parts'];
 		$decodedParts = json_decode($partsExtract);
@@ -268,6 +270,42 @@
 				<td class="text-bold text-center"> : </td>
 				<td class="border-bottom" colspan="10">{{ $info[0]->original_owner }}</td>
 			</tr>
+            @if ($owners != '')
+                <tr>
+                    <td class="" colspan="" rowspan="<?php count($owners)?>" valign="top"></td>
+                    <td class="text-center" colspan="" rowspan="<?php count($owners)?>" valign="top"></td>
+                    <td class="" colspan="10" rowspan="<?php count($owners)?>" valign="top">Times Repossessed</td>
+                    <td class="text-bold text-center" rowspan="<?php count($owners)?>" valign="top"> : </td>
+                    <td class="" colspan="10" rowspan="<?php count($owners)?>" valign="top">{{ $info[0]->times_repossessed }}</td>
+                    <td class="" colspan="1" rowspan="<?php count($owners)?>" valign="top"></td>
+
+                    @for ($i = 0; $i < count($owners); $i++)
+                        <td class="" colspan="5">Prev. Owner {{ $i + 1 }}</td>
+                        <td class="text-bold text-center"> : </td>
+                        <td class="border-bottom" colspan="10">{{ $owners[$i]['exOwner'] }}</td>
+                    @endfor
+                </tr>
+			@else
+                <tr>
+                    <td class="" colspan=""></td>
+                    <td class="text-center" colspan=""></td>
+                    <td class="" colspan="10">Times Repossessed</td>
+                    <td class="text-bold text-center"> : </td>
+                    <td class="" colspan="10">{{ $info[0]->times_repossessed }}</td>
+                    <td class="" colspan="17"></td>
+                </tr>
+			@endif
+            {{-- <tr>
+				<td class="" colspan=""></td>
+				<td class="text-center" colspan=""></td>
+				<td class="" colspan="10">Times Repossessed</td>
+				<td class="text-bold text-center"> : </td>
+				<td class="" colspan="10">{{ $info[0]->times_repossessed }}</td>
+				<td class="" colspan="1"></td>
+                <td class="" colspan="5">Original Owner</td>
+                <td class="text-bold text-center"> : </td>
+                <td class="border-bottom" colspan="10">{{ count($owners) }}</td>
+			</tr> --}}
 			<tr>
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan="">2</td>
@@ -321,6 +359,7 @@
 				<td class="text-bold text-center"> : </td>
 				<td class="border-bottom" colspan="10">{{ $info[0]->date_repossessed }}</td>
 			</tr>
+			<tr><td class="tr-space-1" colspan="40"></td></tr>
 			<tr>
 				<td class=""> II </td>
 				<td class="" class="">  </td>
@@ -331,13 +370,13 @@
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
-				<td class="" colspan="10">Brand</td>
-				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $info[0]->brand }}</td>
+				<td class="" colspan="10" valign="top">Brand</td>
+				<td class="text-bold text-center" valign="top"> : </td>
+				<td class="border-bottom" colspan="10" valign="top">{{ $info[0]->brand }}</td>
 				<td class="" colspan="1"></td>
-				<td class="" colspan="5">Model</td>
-				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $info[0]->model }}</td>
+				<td class="" colspan="5" valign="top">Model</td>
+				<td class="text-bold text-center" valign="top"> : </td>
+				<td class="border-bottom" colspan="10" valign="top">{{ $info[0]->model }}</td>
 			</tr>
 			<tr>
 				<td class="" colspan="2"></td>
@@ -364,11 +403,12 @@
 				<td class="" colspan="10">Plate No.</td>
 				<td class="text-bold text-center"> : </td>
 				<td class="border-bottom" colspan="10">{{ $info[0]->plate_number }}</td>
-				<td class="" colspan="17"></td>
-				{{-- <td class="" colspan="5">BR / ARV No.</td>
+				<td class="" colspan="1"></td>
+				<td class="" colspan="5">ORCR Staths</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $info[0]->br_or_arv_no }}</td> --}}
+				<td class="border-bottom" colspan="10">{{ $info[0]->orcr_status }}</td>
 			</tr>
+			<tr><td class="tr-space-1" colspan="40"></td></tr>
 			<tr>
 				<td class=""> III </td>
 				<td class="" colspan="">  </td>
@@ -401,6 +441,7 @@
 				<td class="" colspan="3">Class E</td>
 				<td class="" colspan="2"></td>
 			</tr>
+            <tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="10">Complete / Incomplete Documents</td>
@@ -411,31 +452,29 @@
 				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_document_tag == 'ID' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Incomplete Documents</td>
 			</tr>
+            <tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2" rowspan="3"></td>
 				<td class="" colspan="10" rowspan="3" valign="top">Description</td>
 				<td class="" colspan="2" rowspan="3"></td>
-				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'GOOD AS NEW REPOSSESSED UNIT' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="text-center" colspan="" valign="top"><div class="{{ $info[0]->classification == 'A' ? 'box-filled' : 'box' }}"></div></td>
 				<td class="" colspan="10">Good as new repossessed unit</td>
 				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'MINIMAL REPAIR OF REFURBISHMENT' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="10">Minimal repair and refurbishment</td>
+				<td class="text-center" colspan="" valign="top"><div class="{{ $info[0]->classification == 'D' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="" colspan="10">Major Repair Needed</td>
 				<td class="" colspan="2"></td>
 			</tr>
 			<tr>
-				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'MAJOR REPAIR AND REFURBISHMENT' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="10">Major repair and refurbishment</td>
+				<td class="text-center" colspan="" valign="top"><div class="{{ $info[0]->classification == 'B' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="" colspan="10">Presentable, Minimal Conditioning Needed</td>
 				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'CANNIBALIZED' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="10">Cannibalized</td>
+				<td class="text-center" colspan="" valign="top"><div class="{{ $info[0]->classification == 'E' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="" colspan="10">Cannibalized/Totally Wrecked/Involved in an accident</td>
 				<td class="" colspan="2"></td>
 			</tr>
 			<tr>
-				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'MEET AN ACCIDENT' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="10">Involved in an accident</td>
-				<td class="" colspan="2"></td>
-				<td class="text-center" colspan=""><div class="{{ $info[0]->classification_description == 'TOTALLY WRECKED' ? 'box-filled' : 'box' }}"></div></td>
-				<td class="" colspan="10">Totally wrecked</td>
+				<td class="text-center" colspan="" valign="top"><div class="{{ $info[0]->classification == 'C' ? 'box-filled' : 'box' }}"></div></td>
+				<td class="" colspan="10">Minimal Repair Needed</td>
 				<td class="" colspan="2"></td>
 			</tr>
 			<tr><td class="tr-space-1" colspan="40"></td></tr>
@@ -467,7 +506,7 @@
 						<td class="" colspan=""></td>
 						<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($decodedParts[$i]->parts_price) }}</td>
 					</tr>
-					<tr><td class="tr-space-1" colspan="40"></td></tr>
+					<tr><td class="tr-space-2" colspan="40"></td></tr>
 					<?php $total_missing_and_damaged_parts = $total_missing_and_damaged_parts + $decodedParts[$i]->parts_price; ?>
 				@endfor
 			@else
@@ -513,7 +552,6 @@
 				<td class="border-bottom text-right text-amount" colspan="8" style="border-bottom: 2px double black;">{{ formatToMoney($total_missing_and_damaged_parts) }}</td>
 			</tr>
 			<tr><td class="tr-space-1" colspan="40"></td></tr>
-
 			<tr>
 				<td class=""> IV </td>
 				<td class="" colspan="">  </td>
@@ -538,6 +576,7 @@
 				<td class="" colspan="4"></td>
 				<td class="" colspan="36"> Depreciation (From 1st Delivery to Current Date) </td>
 			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="3"></td>
 				<td class="" colspan="11"> 1st to 6th months </td>
@@ -574,6 +613,7 @@
 				{{-- <td class="border-bottom" colspan="3"></td>
 				<td class="" colspan="9"> Depreciation Rate </td> --}}
 			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="30"> Total Depreciation </td>
@@ -598,6 +638,7 @@
                 ?>
 				<td class="border-bottom text-right text-amount" colspan="8">{{ formatToMoney($total_depreciation) }}</td>
 			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="30"> Added Cost - Refubishment </td>
@@ -605,6 +646,7 @@
                     {{ formatToMoney($info[0]->settled_total_cost) }}
                 </td>
 			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="30"> Standard Matrix Value </td>
@@ -613,7 +655,6 @@
                 </td>
 			</tr>
 			<tr><td class="tr-space-1" colspan="40"></td></tr>
-
 			<tr>
 				<td class=""> V </td>
 				<td class="" colspan="">  </td>
@@ -636,6 +677,7 @@
 				<td class="" colspan=""></td>
 				<td class="border-bottom text-right text-amount" colspan="7">{{ $appraisal_value }}</td>
 			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="">2</td>
@@ -651,6 +693,7 @@
 				<td class="border-bottom" colspan="7"></td>
 				<td class="" colspan="7"></td>
 			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
 			<tr>
 				<td class="" colspan="2"></td>
 				<td class="" colspan="">3</td>
@@ -668,7 +711,7 @@
 			</tr>
 			<tr>
 				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="15"></td>
+				<td class="border-bottom" colspan="15"> &nbsp; </td>
 				<td class="" colspan=""></td>
 				<td class="border-bottom" colspan="7"></td>
 				<td class="" colspan=""></td>
@@ -678,7 +721,7 @@
 			</tr>
 			<tr>
 				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="15"></td>
+				<td class="border-bottom" colspan="15"> &nbsp; </td>
 				<td class="" colspan=""></td>
 				<td class="border-bottom" colspan="7"></td>
 				<td class="" colspan=""></td>
@@ -688,7 +731,7 @@
 			</tr>
 			<tr>
 				<td class="" colspan="4"></td>
-				<td class="border-bottom" colspan="15"></td>
+				<td class="border-bottom" colspan="15"> &nbsp; </td>
 				<td class="" colspan=""></td>
 				<td class="border-bottom" colspan="7"></td>
 				<td class="" colspan=""></td>
@@ -710,6 +753,31 @@
 				<td class="" colspan="2"></td>
 				<td class="text-center" colspan="">2</td>
 				<td class="" colspan="37">Each units shall accomplished MUISVA. Whenever there is re-evaluation, attached the previous MUISVA of the unit of the new one.</td>
+			</tr>
+			<tr><td class="tr-space-1" colspan="40"></td></tr>
+            <tr>
+				<td class="" colspan="2"></td>
+				<td class="text-center text-bold" colspan="36">
+					<span style="font-size: 16px; font-style: italic;"> Apprehension, Alarm, and Voilation Status </span>
+				</td>
+				<td class="" colspan="2"></td>
+			</tr>
+            <tr>
+				<td class="" colspan="12">With Apprehension</td>
+				<td class="text-bold text-center"> : </td>
+				<td class="border-bottom" colspan="27">{{ $info[0]->apprehension }}</td>
+			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
+			<tr>
+				<td class="" colspan="12">Apprehension Description</td>
+				<td class="text-bold text-center"> : </td>
+				<td class="border-bottom" colspan="27">{{ $info[0]->apprehension_description == "" ? "-" : $info[0]->apprehension_description }}</td>
+			</tr>
+			<tr><td class="tr-space-2" colspan="40"></td></tr>
+			<tr>
+				<td class="" colspan="12">Summary</td>
+				<td class="text-bold text-center"> : </td>
+				<td class="border-bottom" colspan="27">{{ $info[0]->apprehension_summary == "" ? "-" : $info[0]->apprehension_summary }}</td>
 			</tr>
 		</table>
 	</div>

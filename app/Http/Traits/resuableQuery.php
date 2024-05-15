@@ -10,6 +10,7 @@ trait resuableQuery {
 
         $transactions = $this->forRefurbish()->unionAll($this->forApprisal())->toSql();
         $approvers = $this->forApprover()->toSql();
+        $classification = $this->forClassification()->toSql();
         $stmt = "
             WITH transactions AS (
                 SELECT
@@ -24,8 +25,10 @@ trait resuableQuery {
             ),
             approvers AS (
                 {$approvers}
+            ),
+            defineClassification AS (
+                {$classification}
             )
-
         ";
 
         return $stmt;
@@ -70,11 +73,31 @@ trait resuableQuery {
 
     private function forApprover()
     {
-        return DB::table(DB::raw('approval_matrix_settings'))
+        return DB::table('approval_matrix_settings')
             ->select(
                 DB::raw("JSON_VALUE(signatories, '$[0].user') AS approverId"),
                 'module_id',
                 'level'
+            );
+    }
+
+    private function forClassification()
+    {
+        return DB::table('repo_details as repo')
+            ->join('recieve_unit_details as received', 'repo.id', 'received.repo_id')
+            ->leftJoin(DB::raw('(
+                        SELECT
+                            rud.repo_id, SUM(price) total_parts_price
+                        FROM recieve_unit_details rud
+                        LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
+                        WHERE rus.is_deleted = 0 AND rus.refurb_id IS NULL
+                    GROUP BY rud.repo_id
+                ) total_parts'),
+                'total_parts.repo_id', 'repo.id'
+            )
+            ->select(
+                'repo.id as repo_id',
+                DB::raw('ROUND((total_parts.total_parts_price / repo.original_srp) * 100.0, 2) AS class_percent')
             );
     }
 }

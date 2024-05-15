@@ -31,30 +31,33 @@ class RepoController extends BaseController
 				'customer_acumatica_id' => 'required',
 				'brand_id' => 'required',
 				'model_id' => 'required',
-				'plate_number' => 'required',
 				'model_engine' => 'required',
 				'model_chassis' => 'required',
 				'color_id' => 'required',
+				'plate_number' => 'required',
 				'mv_file_number' => 'nullable',
-				'classification' => 'required',
 				'year_model' => 'required',
-				'original_srp' => 'required',
-				'date_sold' => 'required',
+				'orcr_status' => 'required',
 				'original_owner' => 'required',
-				'unit_loan_amount' => 'required',
-				'unit_total_payment' => 'required',
-				'unit_principal_balance' => 'required',
-				// 'msuisva_form_no' => 'required',
+				'original_owner_id' => 'required',
+				'unit_documents' => 'required',
+				'date_sold' => 'required',
 				'date_surrender' => 'required',
+				'original_srp' => 'required',
+				'unit_loan_amount' => 'required',
+				'unit_principal_balance' => 'required',
+				'unit_total_payment' => 'required',
+				'last_payment' => 'nullable',
+				'loan_number' => 'required',
+				'odo_meter' => 'required',
 				'location' => 'required',
+				'apprehension' => 'required',
+				'apprehension_description' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
+				'apprehension_summary' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
+
 				'certify_no_missing_and_damaged_parts' => 'required',
 				'append_count' => 'required',
 				'module_id' => 'required',
-				'loan_number' => 'required',
-				'odo_meter' => 'required',
-				'unit_description' => 'required',
-				'unit_documents' => 'required',
-				'last_payment' => 'nullable',
 
 				'image_fetch_id_*' => 'nullable',
 				'image_*' => 'nullable',
@@ -86,26 +89,27 @@ class RepoController extends BaseController
 			else {
 				$repo_format = [
 					'branch_id' => Auth::user()->branch,
-					'location' => $request->location,
 					'customer_acumatica_id' => $request->customer_acumatica_id,
 					'brand_id' => $request->brand_id,
 					'model_id' => $request->model_id,
-					'plate_number' => $request->plate_number,
 					'model_engine' => $request->model_engine,
 					'model_chassis' => $request->model_chassis,
 					'color_id' => $request->color_id,
+					'plate_number' => $request->plate_number,
 					'mv_file_number' => $request->mv_file_number,
-					'classification' => $request->classification,
 					'year_model' => $request->year_model,
-					'original_srp' => $request->original_srp,
+					'orcr_status' => $request->orcr_status,
+					'unit_documents' => $request->unit_documents,
 					'date_sold' => $request->date_sold,
 					'date_surrender' => $request->date_surrender,
-					// 'msuisva_form_no' => $request->msuisva_form_no,
+					'original_srp' => $request->original_srp,
+                    'last_payment' => $request->last_payment,
 					'loan_number' => $request->loan_number,
 					'odo_meter' => $request->odo_meter,
-					'unit_description' => $request->unit_description,
-					'unit_documents' => $request->unit_documents,
-                    'last_payment' => $request->last_payment,
+					'location' => $request->location,
+                    'apprehension' => $request->apprehension,
+                    'apprehension_description' => $request->apprehension_description,
+                    'apprehension_summary' => $request->apprehension_summary,
 				];
 
 				DB::beginTransaction();
@@ -150,6 +154,7 @@ class RepoController extends BaseController
 					'principal_balance' => $request->unit_principal_balance,
 					'is_certified_no_parts' => $request->certify_no_missing_and_damaged_parts,
 					'original_owner' => $request->original_owner,
+					'original_owner_id' => $request->original_owner_id,
 				];
 
 				$receive_unit = receive_unit::create($receive_format);
@@ -312,18 +317,36 @@ class RepoController extends BaseController
 	public function repoDetailsPerId($id, $moduleid)
 	{
 		try {
-			$repo = DB::table('repo_details')->where('id', '=', $id)->first();
+			$repo = DB::table('repo_details as repo')
+                ->selectRaw("
+                    repo.*,
+                    times_repossessed = (
+                        SELECT COUNT(*)
+                        FROM repo_details
+                        WHERE model_engine LIKE repo.model_engine AND model_chassis LIKE repo.model_chassis
+                    ),
+                    owners = (
+                        SELECT original_owner AS exOwner
+                        FROM repo_details rep
+                        INNER JOIN recieve_unit_details rud ON rep.id = rud.repo_id
+                        WHERE model_engine like repo.model_engine
+                            AND model_chassis like repo.model_chassis
+                            AND rep.id != repo.id
+                        ORDER BY rep.created_at DESC
+                        FOR JSON PATH
+                    )
+                ")
+                ->where('repo.id', '=', $id)->first();
 			$customer = DB::table('customer_profile')->where('id', '=', $repo->customer_acumatica_id)->first();
 			$brand = DB::table('brands')->where('id', '=', $repo->brand_id)->first();
 			$model = DB::table('unit_models')->where('brand_id', '=', $repo->brand_id)->where('id', '=', $repo->model_id)->first();
 			$color = DB::table('unit_colors')->where('id', '=', $repo->color_id)->first();
 			$picture = DB::table('files_uploaded')->where('reference_id', '=', $repo->id)->where('module_id', '=', $moduleid)->where('is_deleted', '=', 0)->get();
-			$maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $repo->id)->where('branch', '=', $repo->branch_id)->max('id');
-			$received = DB::table('recieve_unit_details')->where('id', '=', $maxid)->first();
+			$received = DB::table('recieve_unit_details')->where('id', '=', $repo->id)->first();
 			$parts = DB::table('recieve_unit_spare_parts as rsp')
 				->select('rsp.*', 'prt.name', DB::raw("CASE WHEN rsp.actual_price != 0 OR rsp.actual_price != null THEN rsp.actual_price ELSE rsp.price END AS latest_price"))
 				->leftJoin('spare_parts as prt', 'rsp.parts_id', '=', 'prt.id')
-				->where('rsp.recieve_id', '=', $maxid)->where('rsp.is_deleted', '=', 0)
+				->where('rsp.recieve_id', '=', $received->id)->where('rsp.is_deleted', '=', 0)
 				->where(function ($query) {
 					$query->where('rsp.refurb_decision', '=', 'na')
 						->orWhereNull('rsp.refurb_decision');
@@ -428,34 +451,36 @@ class RepoController extends BaseController
 	{
 		try{
 			$validator = Validator::make($request->all(), [
-				// 'repo_id' => 'required',
 				'customer_acumatica_id' => 'required',
 				'brand_id' => 'required',
 				'model_id' => 'required',
-				'plate_number' => 'required',
 				'model_engine' => 'required',
 				'model_chassis' => 'required',
 				'color_id' => 'required',
+				'plate_number' => 'required',
 				'mv_file_number' => 'nullable',
-				'classification' => 'required',
 				'year_model' => 'required',
-				'original_srp' => 'required',
-				'date_sold' => 'required',
+				'orcr_status' => 'required',
 				'original_owner' => 'required',
-				'unit_loan_amount' => 'required',
-				'unit_total_payment' => 'required',
-				'unit_principal_balance' => 'required',
-				// 'msuisva_form_no' => 'required',
+				'original_owner_id' => 'required',
+				'unit_documents' => 'required',
+				'date_sold' => 'required',
 				'date_surrender' => 'required',
+				'original_srp' => 'required',
+				'unit_loan_amount' => 'required',
+				'unit_principal_balance' => 'required',
+				'unit_total_payment' => 'required',
+				'last_payment' => 'nullable',
+				'loan_number' => 'required',
+				'odo_meter' => 'required',
 				'location' => 'required',
+				'apprehension' => 'required',
+				'apprehension_description' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
+				'apprehension_summary' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
+
 				'certify_no_missing_and_damaged_parts' => 'required',
 				'append_count' => 'required',
 				'module_id' => 'required',
-				'loan_number' => 'required',
-				'odo_meter' => 'required',
-				'unit_description' => 'required',
-				'unit_documents' => 'required',
-                'last_payment' => 'nullable',
 
 				'image_fetch_id_*' => 'nullable',
 				'image_*' => 'nullable',
@@ -487,26 +512,27 @@ class RepoController extends BaseController
 			// else {
 
 				$repo_format = [
-					'location' => $request->location,
 					'customer_acumatica_id' => $request->customer_acumatica_id,
 					'brand_id' => $request->brand_id,
 					'model_id' => $request->model_id,
-					'plate_number' => $request->plate_number,
 					'model_engine' => $request->model_engine,
 					'model_chassis' => $request->model_chassis,
 					'color_id' => $request->color_id,
+					'plate_number' => $request->plate_number,
 					'mv_file_number' => $request->mv_file_number,
-					'classification' => $request->classification,
 					'year_model' => $request->year_model,
-					'original_srp' => $request->original_srp,
+					'orcr_status' => $request->orcr_status,
+					'unit_documents' => $request->unit_documents,
 					'date_sold' => $request->date_sold,
 					'date_surrender' => $request->date_surrender,
-					// 'msuisva_form_no' => $request->msuisva_form_no,
+					'original_srp' => $request->original_srp,
+                    'last_payment' => $request->last_payment,
 					'loan_number' => $request->loan_number,
 					'odo_meter' => $request->odo_meter,
-					'unit_description' => $request->unit_description,
-					'unit_documents' => $request->unit_documents,
-                    'last_payment' => $request->last_payment,
+					'location' => $request->location,
+                    'apprehension' => $request->apprehension,
+                    'apprehension_description' => $request->apprehension_description,
+                    'apprehension_summary' => $request->apprehension_summary,
 				];
 
 				DB::beginTransaction();
@@ -540,13 +566,14 @@ class RepoController extends BaseController
 					}
 				}
 
-				$receive_format = [
+                $receive_format = [
 					'unit_price' => $request->original_srp,
 					'loan_amount' => $request->unit_loan_amount,
 					'total_payments' => $request->unit_total_payment,
 					'principal_balance' => $request->unit_principal_balance,
 					'is_certified_no_parts' => $request->certify_no_missing_and_damaged_parts,
 					'original_owner' => $request->original_owner,
+					'original_owner_id' => $request->original_owner_id,
 				];
 
 				DB::table('recieve_unit_details')->where('id', $maxid->id)->update($receive_format);

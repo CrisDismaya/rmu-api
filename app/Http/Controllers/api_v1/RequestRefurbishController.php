@@ -12,13 +12,14 @@ use App\Models\refurbish_detail;
 use App\Models\refurbishProcess;
 use Illuminate\Http\Request;
 use App\Http\Traits\helper;
+use App\Http\Traits\resuableQuery;
 use Carbon\Carbon;
 use App\Models\approval_matrix_setting;
 
 class RequestRefurbishController extends BaseController
 {
 	//
-	use helper;
+	use helper, resuableQuery;
 	public function listOfForRefurbish()
 	{
 
@@ -165,13 +166,23 @@ class RequestRefurbishController extends BaseController
 	public function getRefurbishParts($repo_id)
 	{
 		try {
-			return DB::table("recieve_unit_details as received")
-				->join("recieve_unit_spare_parts as received_parts", "received.id", "received_parts.recieve_id")
-				->leftjoin("spare_parts as parts", "received_parts.parts_id", "parts.id")
-				->select("received_parts.id as received_ids", "received_parts.price", "parts.name", "parts.id")
-				->where('received.repo_id', '=', $repo_id)
-                ->whereNull('refurb_decision')->orWhere('refurb_decision', '!=', 'done')
-				->get();
+            return DB::select("SELECT
+                    parts.id as received_ids, parts.price, spare.name, parts.id
+                FROM repo_details repo
+                INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
+                LEFT JOIN recieve_unit_spare_parts parts ON received.id = parts.recieve_id
+                LEFT JOIN spare_parts spare ON parts.parts_id = spare.id
+                INNER JOIN request_refurbishes refurb ON repo.id = refurb.repo_id AND parts.refurb_id = refurb.id
+                WHERE repo.id = :repoId",
+                [ 'repoId' => $repo_id ]
+            );
+
+			// return DB::table("recieve_unit_details as received")
+			// 	->join("recieve_unit_spare_parts as received_parts", "received.id", "received_parts.recieve_id")
+			// 	->leftjoin("spare_parts as parts", "received_parts.parts_id", "parts.id")
+			// 	->select("received_parts.id as received_ids", "received_parts.price", "parts.name", "parts.id")
+			// 	->where('received.repo_id', '=', $repo_id)
+			// 	->get();
 
 			// $get_spare_missing = DB::table('refurbish_details as a')
 			//     ->join('spare_parts as b', 'b.id', 'a.spare_parts')
@@ -670,78 +681,86 @@ class RequestRefurbishController extends BaseController
 
 	public function listForRefurbishProcess($moduleid)
 	{
-
 		try {
+            $cteQuery = $this->cteQuery();
 
-			$refurbish_request = DB::table('repo_details as repo')
-				// ->join('request_refurbishes as refurbish','refurbish.repo_id','repo.id')
-				->join('request_refurbishes as refurbish', function ($join) {
-					$join->on('repo.id', '=', 'refurbish.repo_id');
-					$join->on('repo.branch_id', '=', 'refurbish.branch');
-				})
-				->join('recieve_unit_details as receive', 'repo.id', 'receive.repo_id')
-				->join('branches as br', 'repo.branch_id', 'br.id')
-				->join('brands as brd', 'repo.brand_id', 'brd.id')
-				->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
-				->join('unit_colors as color', 'repo.color_id', 'color.id')
-				->leftjoin('refurbish_processes as process', 'process.refurbish_req_id', 'refurbish.id')
-				->leftjoin('users as holder', 'process.approver', 'holder.id')
-				->leftjoin('users as req', 'process.maker', 'req.id')
-				->select(
-					'process.id as processid',
-					'refurbish.id as refurbish_id',
-					'process.files_names as qoute',
-					'repo.id as repo_id',
-					'repo.model_engine',
-					'repo.model_chassis',
-					'repo.date_sold',
-					'br.name as branchname',
-					'brd.brandname',
-					'mdl.model_name',
-					'color.name as color',
-					DB::raw("CASE WHEN process.status = '0' THEN 'WAITING FOR APPROVAL'
-							WHEN process.status = '1' THEN 'APPROVED' WHEN process.status = '2' THEN 'DISAPPROVED' ELSE 'Subject For Refurbishing' END status
-					"),
-					'process.remarks',
-					DB::raw('CONCAT(holder.firstname,holder.middlename,holder.lastname) as current_holder'),
-					DB::raw('CONCAT(req.firstname,req.middlename,req.lastname) as requestor'),
-					'process.re_class as classification',
-					'receive.id as receive_id'
-				);
-			// ->whereIn('refurbish.status',['0','2'])
-			// ->where('refurbish.approver',Auth::user()->id)
-			// ->get();
+            $role = DB::select("
+                DECLARE @module INT = :module, @userId INT = :userId;
+                {$cteQuery}
 
-			$count = 0;
-			$get_approvers = approval_matrix_setting::where('module_id', $moduleid)->get();
-			foreach ($get_approvers as $approvers) {
+                SELECT
+                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
+                        WHEN 1 THEN 'Approver'
+                        ELSE 'Maker'
+                    END AS roles
+                ",
+                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
+            );
 
-				foreach ($approvers->signatories as $approver) {
+            $stmt = DB::select("
+                DECLARE @role NVARCHAR(10) = :role, @userId INT = :userId;
+                {$cteQuery}
 
-					if (Auth::user()->id == $approver['user']) {
-						$count++;
-					}
-				}
-			}
+                SELECT
+                    process.id as processid,
+                    refurbish.id as refurbish_id,
+                    process.files_names as qoute,
+                    repo.id as repo_id,
+                    repo.model_engine,
+                    repo.model_chassis,
+                    repo.date_sold,
+                    br.name as branchname,
+                    brd.brandname,
+                    mdl.model_name,
+                    color.name as color,
+                    CASE
+                        WHEN process.status = '0' THEN 'WAITING FOR APPROVAL'
+                        WHEN process.status = '1' THEN 'APPROVED'
+                        WHEN process.status = '2' THEN 'DISAPPROVED'
+                        ELSE 'Subject For Refurbishing'
+                    END as status,
+                    process.remarks,
+                    CONCAT(holder.firstname, holder.middlename, holder.lastname) as current_holder,
+                    CONCAT(req.firstname, req.middlename, req.lastname) as requestor,
+                    UPPER(CASE
+                        WHEN defineClass.class_percent <= 5 THEN 'A'
+                        WHEN defineClass.class_percent >= 6 AND defineClass.class_percent <= 10 THEN 'B'
+                        WHEN defineClass.class_percent >= 11 AND defineClass.class_percent <= 15 THEN 'C'
+                        WHEN defineClass.class_percent >= 16 AND defineClass.class_percent <= 20 THEN 'D'
+                        WHEN defineClass.class_percent >= 21 THEN 'E'
+                        ELSE '0'
+                    END) AS [classification],
+                    receive.id as receive_id
+                FROM repo_details as repo
+                INNER JOIN request_refurbishes as refurbish ON repo.id = refurbish.repo_id AND repo.branch_id = refurbish.branch
+                INNER JOIN recieve_unit_details as receive ON repo.id = receive.repo_id
+                INNER JOIN branches as br ON repo.branch_id = br.id
+                INNER JOIN brands as brd ON repo.brand_id = brd.id
+                INNER JOIN unit_models as mdl ON repo.model_id = mdl.id
+                INNER JOIN unit_colors as color ON repo.color_id = color.id
+                LEFT JOIN refurbish_processes as process ON process.refurbish_req_id = refurbish.id
+                LEFT JOIN users as holder ON process.approver = holder.id
+                LEFT JOIN users as req ON process.maker = req.id
+                LEFT JOIN defineClassification defineClass ON repo.id = defineClass.repo_id
+                WHERE (
+                    (
+                        @role = 'Approver' AND process.status = 0 AND process.approver = @userId
+                    )
+                    OR
+                    (
+                        @role = 'Maker' AND refurbish.status = 3 AND refurbish.maker = @userId
+                    )
+                )
+                ",
+                [ 'role' => $role[0]->roles, 'userId' =>  Auth::user()->id ]
+            );
 
-			$role = '';
-
-			if ($count > 0) {
-				$role = 'Approver';
-				$refurbish_request = $refurbish_request->where('process.status', '0')->where('process.approver', Auth::user()->id)->get();
-			} else {
-				$role = 'Maker';
-
-				// $check = request_refurbish::where('maker', Auth::user()->id)->count();
-
-				// if($check > 0){
-				//     $refurbish_request = $refurbish_request->where('refurbish.maker', Auth::user()->id);
-				// }
-
-				$refurbish_request = $refurbish_request->where('refurbish.status', '3')->where('refurbish.maker', Auth::user()->id)->get();
-			}
-			$data = ['data' => $refurbish_request, 'role' =>  $role];
-			return $data;
+            return response()->json(
+                [
+                    'data' => $stmt,
+                    'role' =>  $role[0]->roles
+                ]
+            );
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -905,7 +924,7 @@ class RequestRefurbishController extends BaseController
 						->first();
 
 					// DB::table('recieve_unit_details')->where('repo_id', $request->repo_id)->update(['principal_balance' => $total->total_principal_balance]);
-					DB::table('repo_details')->where('id', $request->repo_id)->update(['classification' => $data->re_class]);
+					// DB::table('repo_details')->where('id', $request->repo_id)->update(['classification' => $data->re_class]);
 					DB::table('request_refurbishes')->where('id', $data->refurbish_req_id)->update(['status' => '4']);
 				}
 				$sequence = $fetch_sequence;
@@ -957,10 +976,10 @@ class RequestRefurbishController extends BaseController
 					'old_owner.lastname as o_lastname',
 					DB::raw('CONVERT(DATE,refurbish.created_at) AS date_req'),
 					DB::raw("CASE WHEN refurbish.status = '0' THEN 'PENDING'
-			WHEN refurbish.status = '1' THEN 'APPROVED'
-			WHEN refurbish.status = '3' THEN 'ON GOING REFURBISH'
-			WHEN refurbish.status = '4' THEN 'DONE'
-			ELSE 'DISAPPROVED' END status"),
+                    WHEN refurbish.status = '1' THEN 'APPROVED'
+                    WHEN refurbish.status = '3' THEN 'ON GOING REFURBISH'
+                    WHEN refurbish.status = '4' THEN 'DONE'
+                    ELSE 'DISAPPROVED' END status"),
 				);
 
 			if (Auth::user()->userrole == 'Warehouse Custodian') {
@@ -969,10 +988,66 @@ class RequestRefurbishController extends BaseController
 				$received_units = $received_units->get();
 			}
 
-
 			return $received_units;
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
 	}
+
+    public function settledRefurbishAccounting(){
+        try {
+
+            $stmt = DB::select("SELECT
+                    branch.name AS branchName,
+                    brand.brandname AS brand,
+                    model.model_name AS model,
+                    color.name AS color,
+                    UPPER(repo.model_engine) AS engine,
+                    UPPER(repo.model_chassis) AS chassis,
+                    UPPER(
+                        CONCAT(customer.firstname,
+                            CASE
+                                WHEN customer.middlename != '' THEN CONCAT(' ', customer.middlename, ' ')
+                            ELSE ' ' END, customer.lastname
+                        )
+                    ) AS exOwner,
+                    cost.SettledDate AS SettledDate,
+                    received.principal_balance,
+                    cost.total_cost_parts
+                FROM repo_details repo
+                INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
+                LEFT JOIN branches branch ON repo.branch_id = branch.id
+                LEFT JOIN brands brand ON repo.brand_id = brand.id
+                LEFT JOIN unit_models model ON repo.model_id = model.id
+                LEFT JOIN unit_colors color ON repo.color_id = color.id
+                LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
+                LEFT JOIN (
+                    SELECT
+                        request.repo_id,
+                        SUM(total_cost) AS total_cost_parts,
+                        FORMAT(settle.updated_at, 'MMM dd, yyyy') AS SettledDate
+                    FROM request_refurbishes request
+                    LEFT JOIN refurbish_processes settle ON request.id = settle.refurbish_req_id
+                    LEFT JOIN (
+                        SELECT
+                            refurb_id, SUM(actual_price) AS total_cost
+                        FROM recieve_unit_spare_parts
+                        WHERE refurb_id IS NOT NULL
+                        GROUP BY refurb_id
+                    ) parts ON request.id = parts.refurb_id
+                    WHERE settle.status = 1
+                    GROUP BY request.repo_id, FORMAT(settle.updated_at, 'MMM dd, yyyy')
+                ) cost ON repo.id = cost.repo_id"
+            );
+
+            return response()->json(
+                [
+                    "data" => $stmt
+                ]
+            );
+
+        } catch (\Throwable $th) {
+			return $this->sendError($th->errorInfo[2]);
+		}
+    }
 }

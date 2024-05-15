@@ -121,7 +121,7 @@ class RequestApprovalController extends BaseController
                         rud.repo_id, SUM(price) total_parts_price
                     FROM recieve_unit_details rud
                     LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
-                    WHERE rus.is_deleted = 0 and (rus.refurb_decision IS NULL OR rus.refurb_decision = 'na')
+                    WHERE rus.is_deleted = 0 AND rus.refurb_id IS NULL
                     GROUP BY rud.repo_id
                 ) total_parts ON total_parts.repo_id = repo.id
                 LEFT JOIN (
@@ -129,7 +129,7 @@ class RequestApprovalController extends BaseController
                         rud.repo_id, SUM(price) total_cost_parts
                     FROM recieve_unit_details rud
                     LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
-                    WHERE rus.is_deleted = 0 and (rus.refurb_decision IS NULL OR rus.refurb_decision = 'na')
+                    WHERE rus.is_deleted = 0 and refurb_id IS NOT NULL
                     GROUP BY rud.repo_id
                 ) AS parts ON parts.repo_id = repo.id
                 WHERE received.is_sold = 'N' AND received.status != 4

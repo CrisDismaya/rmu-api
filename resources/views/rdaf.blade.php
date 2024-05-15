@@ -239,7 +239,7 @@
                 <td class="text-center" colspan="10" rowspan="1">
                     <img src="{{ public_path('image/logo.jpg') }}" width="85%" height="8%"  alt="">
                 </td>
-                <td class="text-center" colspan="26">
+                <td class="text-center" colspan="26">refurbishUnitList
                     <span class="text-bold" style="font-size: 19px"> Trans Asiatic Finance Incorporated </span><br>
                     <span style="font-size: 11px">
                         Unit 13, 2nd Floor Beacon Commercila Place, Apollo 3, Moonwalk Village, Las Piñas City <br>
@@ -251,110 +251,110 @@
             </tr>
             <tr><td style="padding: 10px;" colspan="36"></td></tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Branch </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->branch }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->branch }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Date </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->today }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->today }} </td>
             </tr>
-            <tr><td style="padding: 20px;" colspan="36"></td></tr>
+            <tr><td style="padding: 15px;" colspan="36"></td></tr>
             <tr>
                 <td colspan="36"><span class="text-bold"> MOTORCYCLE DETAILS: </span></td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Ex-Owner </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->exOwner_Borrower }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->exOwner_Borrower }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Loan No. </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->loan_number }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->loan_number }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Date Released </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->date_released }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->date_released }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Date Repossessed </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->date_repossessed }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->date_repossessed }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Brand </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->brand }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->brand }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Model </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->model }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->model }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Engine# </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->engine_number }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->engine_number }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Chassis# </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->chassis_number }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->chassis_number }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Original Selling Price </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->original_selling_price) }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ formatToMoney($info[0]->original_selling_price) }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Original Loan Amount </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->original_loan_amount) }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ formatToMoney($info[0]->original_loan_amount) }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Outstanding Loan Balanace </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->outstanding_loan_balance) }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ formatToMoney($info[0]->outstanding_loan_balance) }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Total Payments </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->total_payments) }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ formatToMoney($info[0]->total_payments) }} </td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Last Date of Payments </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ $info[0]->last_date_payments }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ $info[0]->last_date_payments }} </td>
             </tr>
             <tr><td style="padding: 20px;" colspan="36"></td></tr>
             <tr>
                 <td colspan="36"><span class="text-bold"> BRANCH/DEALER RECOMMENDATION: </span></td>
             </tr>
             <tr>
-                <td class="text-bold border-col" style="padding: 10px 10px" colspan="12">
+                <td class="text-bold border-col" style="padding: 8px 8px" colspan="12">
                     <span style="font-size: 12px;"> Proposed Price </span>
                 </td>
-                <td class="border-col" colspan="24" style="padding: 10px 10px"> {{ formatToMoney($info[0]->approved_appraised_price) }} </td>
+                <td class="border-col" colspan="24" style="padding: 8px 8px"> {{ formatToMoney($info[0]->propose_appraised_price) }} </td>
             </tr>
-            <tr><td style="padding: 20px;" colspan="36"></td></tr>
+            <tr><td style="padding: 15px;" colspan="36"></td></tr>
             <tr>
                 <td class="text-center" colspan="12">
                     <span class="text-bold"> DECISION </span>
@@ -369,26 +369,26 @@
             @if (count($approver) > 0)
 				@for ($i = 0; $i < count($approver); $i++)
                     <tr>
-                        <td class=" text-bold border-col" style="padding: 10px 10px" colspan="12">
+                        <td class=" text-bold border-col" style="padding: 8px 8px" colspan="12">
                             <span style="font-size: 12px;"> {{ $approver[$i]->fullname }} </span>
                         </td>
-                        <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                        <td class="text-center text-bold border-col" style="padding: 8px 8px" colspan="12">
                             <span style="font-size: 12px;"> {{ formatToMoney($approver[$i]->appraised_price) }} </span>
                         </td>
-                        <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                        <td class="text-center text-bold border-col" style="padding: 8px 8px" colspan="12">
                             <span style="font-size: 12px;"> {{ $approver[$i]->date_approved }} </span>
                         </td>
                     </tr>
                 @endfor
 			@else
                 <tr>
-                    <td class=" text-bold border-col" style="padding: 10px 10px" colspan="12">
+                    <td class=" text-bold border-col" style="padding: 8px 8px" colspan="12">
                         <span style="font-size: 12px;"> &nbsp; </span>
                     </td>
-                    <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                    <td class="text-center text-bold border-col" style="padding: 8px 8px" colspan="12">
                         <span style="font-size: 12px;"> &nbsp; </span>
                     </td>
-                    <td class="text-center text-bold border-col" style="padding: 10px 10px" colspan="12">
+                    <td class="text-center text-bold border-col" style="padding: 8px 8px" colspan="12">
                         <span style="font-size: 12px;"> &nbsp; </span>
                     </td>
                 </tr>

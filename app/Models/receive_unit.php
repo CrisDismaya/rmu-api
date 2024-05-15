@@ -20,6 +20,7 @@ class receive_unit extends Model
 		'principal_balance',
 		'is_certified_no_parts',
 		'original_owner',
+        'original_owner_id',
 		'approver',
 		'date_approved',
 	];

@@ -55,20 +55,51 @@ class ReportController extends BaseController
                 UPPER(repo.msuisva_form_no) AS muisva_number,
                 'TRANS ASIATIC FINANCE INCORPORATED' AS originating_financing_store,
                 UPPER(received.original_owner) AS original_owner,
+                times_repossessed = (
+                    SELECT COUNT(*)
+                    FROM repo_details
+                    WHERE model_engine LIKE repo.model_engine AND model_chassis LIKE repo.model_chassis
+                ),
+                owners = (
+                    SELECT original_owner AS exOwner
+                    FROM repo_details rep
+                    INNER JOIN recieve_unit_details rud ON rep.id = rud.repo_id
+                    WHERE model_engine like repo.model_engine
+                        AND model_chassis like repo.model_chassis
+                        AND rep.id != repo.id
+                    ORDER BY rep.created_at DESC
+                    FOR JSON PATH
+                ),
                 UPPER(TRIM(CONCAT(customer.address,' ',barangay.Title,', ',city.Title,', ',province.Title))) AS [address],
                 UPPER(repo.mv_file_number) AS mv_file_number,
                 repo.year_model AS year_model,
+                repo.orcr_status AS orcr_status,
                 UPPER(repo.plate_number) AS plate_number,
-                UPPER(repo.classification) AS [classification],
+                UPPER(CASE
+                    WHEN defineClass.class_percent <= 5 THEN 'A'
+                    WHEN defineClass.class_percent >= 6 AND defineClass.class_percent <= 10 THEN 'B'
+                    WHEN defineClass.class_percent >= 11 AND defineClass.class_percent <= 15 THEN 'C'
+                    WHEN defineClass.class_percent >= 16 AND defineClass.class_percent <= 20 THEN 'D'
+                    WHEN defineClass.class_percent >= 21 THEN 'E'
+                    ELSE '0'
+                END) AS [classification],
                 UPPER(repo.unit_documents) AS classification_document_tag,
-                UPPER(repo.unit_description) AS classification_description,
-                DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month,
+                UPPER(CASE
+                    WHEN defineClass.class_percent <= 5 THEN 'A'
+                    WHEN defineClass.class_percent >= 6 AND defineClass.class_percent <= 10 THEN 'B'
+                    WHEN defineClass.class_percent >= 11 AND defineClass.class_percent <= 15 THEN 'C'
+                    WHEN defineClass.class_percent >= 16 AND defineClass.class_percent <= 20 THEN 'D'
+                    WHEN defineClass.class_percent >= 21 THEN 'E'
+                    ELSE '0'
+                END) AS classification_description,
+                DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) AS standard_matrix_month,
                 ISNULL(parts.total_cost_parts, 0) AS total_cost_parts,
                 CASE
                     WHEN appraise.approved_price IS NOT NULL THEN 'true'
                     ELSE 'false'
                 END AS has_appraised,
                 appraise.approved_price AS approved_appraised_price,
+                appraise.propose_price AS propose_appraised_price,
                 FORMAT(appraise.date_approved, 'MMM dd, yyyy') AS appraise_date_approved,
                 UPPER(sold.buyer) AS buyer,
                 UPPER(sold.address) AS buyer_address,
@@ -82,7 +113,10 @@ class ReportController extends BaseController
                         FROM transactions
                         WHERE repo_id = repo.id AND source_process = 'appraisal'
                     )
-                ), 0) AS settled_total_cost
+                ), 0) AS settled_total_cost,
+                UPPER(repo.apprehension) AS apprehension,
+                repo.apprehension_description AS apprehension_description,
+                repo.apprehension_summary AS apprehension_summary
             FROM repo_details repo
             INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
             LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
@@ -96,19 +130,23 @@ class ReportController extends BaseController
             LEFT JOIN locations [location] ON repo.[location] = [location].id
             LEFT JOIN (
                 SELECT
-                    request.received_unit_id,
-                    CASE
-                        WHEN request.approved_price = history.appraised_price THEN history.appraised_price
-                        ELSE request.approved_price
-                    END AS approved_price,
-                    history.created_at AS date_approved
-                FROM (
-                    SELECT MAX(id) AS latest_id, repo_id
-                    FROM request_approvals
-                    GROUP BY repo_id
-                ) sub
-                INNER JOIN request_approvals request ON sub.latest_id = request.id
-                INNER JOIN appraisal_histories history ON request.id = history.appraisal_req_id
+					request.received_unit_id,
+					CASE
+						WHEN request.approved_price = history.appraised_price THEN request.approved_price
+						ELSE history.appraised_price
+					END AS approved_price,
+					CASE
+						WHEN request.approved_price != history.appraised_price THEN request.approved_price
+						ELSE history.appraised_price
+					END AS propose_price,
+					history.created_at AS date_approved
+				FROM (
+					SELECT MAX(id) AS latest_id, repo_id
+					FROM request_approvals
+					GROUP BY repo_id
+				) sub
+				INNER JOIN request_approvals request ON sub.latest_id = request.id
+				INNER JOIN appraisal_histories history ON request.id = history.appraisal_req_id
             ) appraise ON received.id = appraise.received_unit_id
             LEFT JOIN (
                 SELECT
@@ -152,6 +190,7 @@ class ReportController extends BaseController
                 LEFT JOIN users users ON sold.maker = users.id
                 WHERE sold.status = 1
             ) sold ON repo.id = sold.repo_id
+            LEFT JOIN defineClassification defineClass ON repo.id = defineClass.repo_id
             WHERE repo.id = :recid",
             $parameter
         );
@@ -274,7 +313,7 @@ class ReportController extends BaseController
 				)
 			)
 		)
-        ->setPaper('legal', 'portrait');
+        ->setPaper('letter', 'portrait');
 
 		return $pdf->stream();
 	}
