@@ -34,6 +34,8 @@ class CreateRepoDetailsTable extends Migration
             $table->string('loan_number');
             $table->string('odo_meter');
             $table->integer('location');
+            $table->integer('times_repossessed');
+            $table->string('repossessed_exowner')->nullable();
             $table->string('apprehension');
             $table->string('apprehension_description');
             $table->string('apprehension_summary');

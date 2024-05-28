@@ -55,21 +55,8 @@ class ReportController extends BaseController
                 UPPER(repo.msuisva_form_no) AS muisva_number,
                 'TRANS ASIATIC FINANCE INCORPORATED' AS originating_financing_store,
                 UPPER(received.original_owner) AS original_owner,
-                times_repossessed = (
-                    SELECT COUNT(*)
-                    FROM repo_details
-                    WHERE model_engine LIKE repo.model_engine AND model_chassis LIKE repo.model_chassis
-                ),
-                owners = (
-                    SELECT original_owner AS exOwner
-                    FROM repo_details rep
-                    INNER JOIN recieve_unit_details rud ON rep.id = rud.repo_id
-                    WHERE model_engine like repo.model_engine
-                        AND model_chassis like repo.model_chassis
-                        AND rep.id != repo.id
-                    ORDER BY rep.created_at DESC
-                    FOR JSON PATH
-                ),
+                repo.times_repossessed,
+                repo.repossessed_exowner AS owners,
                 UPPER(TRIM(CONCAT(customer.address,' ',barangay.Title,', ',city.Title,', ',province.Title))) AS [address],
                 UPPER(repo.mv_file_number) AS mv_file_number,
                 repo.year_model AS year_model,

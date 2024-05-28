@@ -51,6 +51,8 @@ class RepoController extends BaseController
 				'loan_number' => 'required',
 				'odo_meter' => 'required',
 				'location' => 'required',
+				'times_repossessed' => 'required',
+				'repossessed_exowner' => ($request->times_repossessed > 1 ? 'required' : 'nullable'),
 				'apprehension' => 'required',
 				'apprehension_description' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
 				'apprehension_summary' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
@@ -107,6 +109,8 @@ class RepoController extends BaseController
 					'loan_number' => $request->loan_number,
 					'odo_meter' => $request->odo_meter,
 					'location' => $request->location,
+					'times_repossessed' => $request->times_repossessed,
+					'repossessed_exowner' => $request->repossessed_exowner,
                     'apprehension' => $request->apprehension,
                     'apprehension_description' => $request->apprehension_description,
                     'apprehension_summary' => $request->apprehension_summary,
@@ -319,22 +323,7 @@ class RepoController extends BaseController
 		try {
 			$repo = DB::table('repo_details as repo')
                 ->selectRaw("
-                    repo.*,
-                    times_repossessed = (
-                        SELECT COUNT(*)
-                        FROM repo_details
-                        WHERE model_engine LIKE repo.model_engine AND model_chassis LIKE repo.model_chassis
-                    ),
-                    owners = (
-                        SELECT original_owner AS exOwner
-                        FROM repo_details rep
-                        INNER JOIN recieve_unit_details rud ON rep.id = rud.repo_id
-                        WHERE model_engine like repo.model_engine
-                            AND model_chassis like repo.model_chassis
-                            AND rep.id != repo.id
-                        ORDER BY rep.created_at DESC
-                        FOR JSON PATH
-                    )
+                    repo.*
                 ")
                 ->where('repo.id', '=', $id)->first();
 			$customer = DB::table('customer_profile')->where('id', '=', $repo->customer_acumatica_id)->first();
@@ -342,7 +331,7 @@ class RepoController extends BaseController
 			$model = DB::table('unit_models')->where('brand_id', '=', $repo->brand_id)->where('id', '=', $repo->model_id)->first();
 			$color = DB::table('unit_colors')->where('id', '=', $repo->color_id)->first();
 			$picture = DB::table('files_uploaded')->where('reference_id', '=', $repo->id)->where('module_id', '=', $moduleid)->where('is_deleted', '=', 0)->get();
-			$received = DB::table('recieve_unit_details')->where('id', '=', $repo->id)->first();
+			$received = DB::table('recieve_unit_details')->where('repo_id', '=', $repo->id)->first();
 			$parts = DB::table('recieve_unit_spare_parts as rsp')
 				->select('rsp.*', 'prt.name', DB::raw("CASE WHEN rsp.actual_price != 0 OR rsp.actual_price != null THEN rsp.actual_price ELSE rsp.price END AS latest_price"))
 				->leftJoin('spare_parts as prt', 'rsp.parts_id', '=', 'prt.id')
@@ -474,6 +463,8 @@ class RepoController extends BaseController
 				'loan_number' => 'required',
 				'odo_meter' => 'required',
 				'location' => 'required',
+				'times_repossessed' => 'required',
+				'repossessed_exowner' => ($request->times_repossessed > 1 ? 'required' : 'nullable'),
 				'apprehension' => 'required',
 				'apprehension_description' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
 				'apprehension_summary' => ($request->apprehension == 'yes' ? 'required' : 'nullable'),
@@ -530,6 +521,8 @@ class RepoController extends BaseController
 					'loan_number' => $request->loan_number,
 					'odo_meter' => $request->odo_meter,
 					'location' => $request->location,
+					'times_repossessed' => $request->times_repossessed,
+					'repossessed_exowner' => $request->repossessed_exowner,
                     'apprehension' => $request->apprehension,
                     'apprehension_description' => $request->apprehension_description,
                     'apprehension_summary' => $request->apprehension_summary,

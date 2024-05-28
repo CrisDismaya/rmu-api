@@ -38,6 +38,8 @@ class repo extends Model
         'apprehension_description',
         'apprehension_summary',
         'msuisva_form_no',
+        'times_repossessed',
+        'repossessed_exowner',
     ];
 
     function branch_details(){
