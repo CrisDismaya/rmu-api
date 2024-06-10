@@ -49,16 +49,16 @@ class RequestApprovalController extends BaseController
                     CASE
                         WHEN appraise.approved_price IS NULL THEN (
                             CASE
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 6
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 12
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 24
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 25
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                             ELSE 0 END
                         )
@@ -212,16 +212,16 @@ class RequestApprovalController extends BaseController
                     CASE
                         WHEN appraise.approved_price IS NULL THEN (
                             CASE
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 6
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 12
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 24
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 25
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                             ELSE 0 END
                         )
@@ -498,16 +498,16 @@ class RequestApprovalController extends BaseController
                     CASE
                         WHEN appraise.approved_price IS NULL THEN (
                             CASE
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 6
                                     THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 12
                                     THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 24
                                     THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 25
                                     THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                             ELSE 0 END
                         )
@@ -626,20 +626,20 @@ class RequestApprovalController extends BaseController
                     old_owner.lastname AS o_lastname,
                     repo.created_at AS date_received,
                     received.principal_balance AS original_srp,
-                    DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) AS standard_matrix_month,
+                    DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) AS standard_matrix_month,
                     CASE
                         WHEN appraise.approved_price IS NULL THEN (
                             CASE
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 6
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 12
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 24
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 25
                                     THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                             ELSE 0 END
                         )
@@ -902,31 +902,31 @@ class RequestApprovalController extends BaseController
                     DB::raw('ISNULL(total_parts.total_parts_price, 0) AS total_parts_price'),
                     DB::raw('ISNULL(parts.total_cost_parts, 0) AS total_cost_parts'),
                     DB::raw('CASE
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 6
                                 THEN repo.original_srp * .05
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 12
                                 THEN repo.original_srp * .10
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 24
                                 THEN repo.original_srp * .15
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 25
                                 THEN repo.original_srp * .20
                         ELSE 0 END AS depreciation_cost'
                     ),
                     DB::raw('
                         CASE
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 6
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 6
                                 THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 12
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 12
                                 THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) <= 24
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 24
                                 THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
 
-                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), repo.date_surrender) >= 25
+                            WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 25
                                 THEN (repo.original_srp) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
                         ELSE 0 END AS standard_matrix_value'
                     ),

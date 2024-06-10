@@ -300,7 +300,7 @@ class ReportController extends BaseController
 				)
 			)
 		)
-        ->setPaper('letter', 'portrait');
+        ->setPaper('legal', 'portrait');
 
 		return $pdf->stream();
 	}
