@@ -270,42 +270,26 @@
 				<td class="text-bold text-center"> : </td>
 				<td class="border-bottom" colspan="10">{{ $info[0]->original_owner }}</td>
 			</tr>
-            @if ($owners != '')
-                <tr>
-                    <td class="" colspan="" rowspan="<?php count($owners)?>" valign="top"></td>
-                    <td class="text-center" colspan="" rowspan="<?php count($owners)?>" valign="top"></td>
-                    <td class="" colspan="10" rowspan="<?php count($owners)?>" valign="top">Times Repossessed</td>
-                    <td class="text-bold text-center" rowspan="<?php count($owners)?>" valign="top"> : </td>
-                    <td class="" colspan="10" rowspan="<?php count($owners)?>" valign="top">{{ $info[0]->times_repossessed }}</td>
-                    <td class="" colspan="1" rowspan="<?php count($owners)?>" valign="top"></td>
-
-                    @for ($i = 0; $i < count($owners); $i++)
-                        <td class="" colspan="5">Prev. Owner {{ $i + 1 }}</td>
-                        <td class="text-bold text-center"> : </td>
-                        <td class="border-bottom" colspan="10">{{ $owners[$i]['exOwner'] }}</td>
-                    @endfor
-                </tr>
-			@else
-                <tr>
-                    <td class="" colspan=""></td>
-                    <td class="text-center" colspan=""></td>
-                    <td class="" colspan="10">Times Repossessed</td>
-                    <td class="text-bold text-center"> : </td>
-                    <td class="" colspan="10">{{ $info[0]->times_repossessed }}</td>
-                    <td class="" colspan="17"></td>
-                </tr>
-			@endif
-            {{-- <tr>
-				<td class="" colspan=""></td>
-				<td class="text-center" colspan=""></td>
-				<td class="" colspan="10">Times Repossessed</td>
+			<tr>
+				<td class="" colspan="" rowspan="<?php echo count($owners)?>" valign="top"></td>
+				<td class="text-center" colspan="" rowspan="<?php echo count($owners)?>" valign="top"></td>
+				<td class="" colspan="10" rowspan="<?php echo count($owners)?>" valign="top">Times Repossessed </td>
+				<td class="text-bold text-center" rowspan="<?php echo count($owners)?>" valign="top"> : </td>
+				<td class="" colspan="10" rowspan="<?php echo count($owners)?>" valign="top">{{ $info[0]->times_repossessed }}</td>
+				<td class="" colspan="1" rowspan="<?php echo count($owners)?>" valign="top"></td>
+				<td class="" colspan="5">Prev. Owner 1</td>
 				<td class="text-bold text-center"> : </td>
-				<td class="" colspan="10">{{ $info[0]->times_repossessed }}</td>
-				<td class="" colspan="1"></td>
-                <td class="" colspan="5">Original Owner</td>
-                <td class="text-bold text-center"> : </td>
-                <td class="border-bottom" colspan="10">{{ count($owners) }}</td>
-			</tr> --}}
+				<td class="border-bottom" colspan="10">{{ $owners[0]['exOwner'] }}</td>
+			</tr>
+			@if ($owners != '')
+				@for ($i = 1; $i < count($owners); $i++)
+					<tr>
+						<td class="" colspan="5">Prev. Owner {{ $i + 1 }}</td>
+						<td class="text-bold text-center"> : </td>
+						<td class="border-bottom" colspan="10">{{ $owners[$i]['exOwner'] }}</td>
+					</tr>
+				@endfor
+			@endif
 			<tr>
 				<td class="" colspan=""></td>
 				<td class="text-center" colspan="">2</td>
