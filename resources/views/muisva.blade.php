@@ -158,7 +158,7 @@
 	<?php
 		$dataExtract = $data['datas'];
 		$info = json_decode($dataExtract);
-		$owners = json_decode($info[0]->owners, true);
+		$owners = ($info[0]->owners != '[]' ? json_decode($info[0]->owners, true) : '');
 
 		$partsExtract = $data['parts'];
 		$decodedParts = json_decode($partsExtract);
@@ -166,11 +166,10 @@
         function formatToMoney($number) {
             return number_format($number, 2, '.', ',');
         }
-
 	?>
 
 	<div style="position: relative; margin: 0 auto; width: 100%; font-family: sans-serif;">
-
+        {{ $owners == '' ? '' : count($owners) }}
 		<table class="">
 		{{-- <table class="table-bordered"> --}}
 			<tr>
@@ -271,15 +270,19 @@
 				<td class="border-bottom" colspan="10">{{ $info[0]->original_owner }}</td>
 			</tr>
 			<tr>
-				<td class="" colspan="" rowspan="<?php echo count($owners)?>" valign="top"></td>
-				<td class="text-center" colspan="" rowspan="<?php echo count($owners)?>" valign="top"></td>
-				<td class="" colspan="10" rowspan="<?php echo count($owners)?>" valign="top">Times Repossessed </td>
-				<td class="text-bold text-center" rowspan="<?php echo count($owners)?>" valign="top"> : </td>
-				<td class="" colspan="10" rowspan="<?php echo count($owners)?>" valign="top">{{ $info[0]->times_repossessed }}</td>
-				<td class="" colspan="1" rowspan="<?php echo count($owners)?>" valign="top"></td>
-				<td class="" colspan="5">Prev. Owner 1</td>
-				<td class="text-bold text-center"> : </td>
-				<td class="border-bottom" colspan="10">{{ $owners[0]['exOwner'] }}</td>
+				<td class="" colspan="" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"></td>
+				<td class="text-center" colspan="" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"></td>
+				<td class="" colspan="10" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top">Times Repossessed </td>
+				<td class="text-bold text-center" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"> : </td>
+				<td class="" colspan="10" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top">{{ $info[0]->times_repossessed }}</td>
+				<td class="" colspan="1" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"></td>
+                @if ($owners != '')
+                    <td class="" colspan="5">Prev. Owner 1</td>
+                    <td class="text-bold text-center"> : </td>
+                    <td class="border-bottom" colspan="10">{{ $owners[0]['exOwner'] }}</td>
+                @else
+                    <td class="" colspan="16"></td>
+                @endif
 			</tr>
 			@if ($owners != '')
 				@for ($i = 1; $i < count($owners); $i++)
