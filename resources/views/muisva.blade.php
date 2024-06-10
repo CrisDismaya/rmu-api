@@ -270,12 +270,12 @@
 				<td class="border-bottom" colspan="10">{{ $info[0]->original_owner }}</td>
 			</tr>
 			<tr>
-				<td class="" colspan="" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"></td>
-				<td class="text-center" colspan="" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"></td>
-				<td class="" colspan="10" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top">Times Repossessed </td>
-				<td class="text-bold text-center" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"> : </td>
-				<td class="" colspan="10" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top">{{ $info[0]->times_repossessed }}</td>
-				<td class="" colspan="1" rowspan="<?php echo $owners == '' ? '' : count($owners)?>" valign="top"></td>
+				<td class="" colspan="" rowspan="<?php echo $owners == '' ? '' : count($owners) ?>" valign="top"></td>
+				<td class="text-center" colspan="" rowspan="<?php echo $owners == '' ? '' : count($owners) ?>" valign="top"></td>
+				<td class="" colspan="10" rowspan="<?php echo $owners == '' ? '' : count($owners) ?>" valign="top">Times Repossessed </td>
+				<td class="text-bold text-center" rowspan="<?php echo $owners == '' ? '' : count($owners) ?>" valign="top"> : </td>
+				<td class="" colspan="10" rowspan="<?php echo $owners == '' ? '' : count($owners) ?>" valign="top">{{ $info[0]->times_repossessed }}</td>
+				<td class="" colspan="1" rowspan="<?php echo $owners == '' ? '' : count($owners) ?>" valign="top"></td>
                 @if ($owners != '')
                     <td class="" colspan="5">Prev. Owner 1</td>
                     <td class="text-bold text-center"> : </td>
