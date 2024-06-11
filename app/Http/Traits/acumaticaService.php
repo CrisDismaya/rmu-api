@@ -118,7 +118,7 @@ trait acumaticaService {
 	}
 
 	public function create_customer($sold_id){
-		$acu_login = $this->acumatica_login();
+		$logStatus = $this->acumatica_login();
 		$endpoint = "{$this->host}/entity/CICLO-API/{$this->version}/Customer";
 
 		$info = DB::table('sold_units sld')
@@ -133,6 +133,7 @@ trait acumaticaService {
                     )
                 ) AS fullname"
             ),
+            'cus.acumatica_id',
             'cus.firstname', 'cus.lastname', 'prv.Title AS province_title', 'cty.Title AS city_title', 'bry.Title AS barangay_title',
             'cus.address', 'cus.contact', 'sld.branch', 'sld.ExternalReference', 'sld.AgentID',
             DB::raw('(sld.terms * 30) AS terms'),
@@ -170,22 +171,19 @@ trait acumaticaService {
 			"Branch" =>  [ "value" => "PAS032"],
 		];
 
-        if($acu_login['status'] !== 200){
+        if($logStatus['status'] !== 200){
             return false;
         }
 
-        $checker = $this->acumatica_checker($this->sold_units_id);
-        // if (strpos($customer_details->acumatica_id, 'CUST') !== false) {
-        //     return $this->create_sales_order(
-        //         $customer_details->acumatica_id,
-        //         $customer_details,
-        //         $sold_details->branch,
-        //         $sold_details->repo_id,
-        //         $sold_details->ExternalReference,
-        //         $sold_details->AgentID,
-        //         $orderType
-        //     );
-        // }
+        return $this->create_sales_order(
+            $info->acumatica_id,
+            $customer_details,
+            $sold_details->branch,
+            $sold_details->repo_id,
+            $sold_details->ExternalReference,
+            $sold_details->AgentID,
+            $info->acumatica_id
+        );
 
 
         return true;

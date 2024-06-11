@@ -4,11 +4,11 @@ namespace App\Http\Controllers\api_v1;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\api_v1\BaseController as BaseController;
-use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use App\Models\User;
 use App\Models\approval_matrix_setting;
 use App\Models\user_role;
 use App\Models\system_menu;
@@ -251,16 +251,16 @@ class UserController extends BaseController
 	{
 
 		try {
-
-			$query = DB::table('users as a')
-				->join('user_role as b', 'b.user_role_name', 'a.userrole')
-				->join('user_role_menu_mapping as c', 'c.user_role_id', 'b.id')
-				->join('system_menu as d', 'd.id', 'c.menu_id')
-				->select('d.*')
-				->where('a.id', Auth::user()->id)
-				->where('d.status', '=', 1)
-				->get();
-			return $query;
+            return DB::table('users as user')
+                    ->select(
+                        'menu.id', 'menu.category_name', 'menu.menu_name', 'menu.file_path', 'menu.parent_id'
+                    )
+                    ->join('user_role as role', 'user.userrole', 'role.user_role_name')
+                    ->join('user_role_menu_mapping as map', 'role.id', 'map.user_role_id')
+                    ->join('system_menu as menu', 'map.menu_id', 'menu.id')
+                    ->where('menu.status', '=', 1)
+                    ->where('user.id', Auth::user()->id)
+                ->get();
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -328,16 +328,16 @@ class UserController extends BaseController
 											b.created_by as maker,'_approval-unit.php' as link
 											from recieve_unit_details as a inner join request_approvals b on b.received_unit_id = a.id
 											inner join users as c on c.id = b.created_by
-											
+
 											union all
-											
+
 											select 'Repo request refurbish' as module, a.id,a.status,a.approver,CONCAT(c.firstname,' ',c.lastname) as requestor,
 											a.maker,'_refurbish-unit.php' as link
 											from request_refurbishes as a
 											inner join users as c on c.id = a.maker
-											
+
 											union all
-											
+
 											select 'Sales approval' as module, a.id,a.status,a.approver,CONCAT(c.firstname,' ',c.lastname) as requestor,
 											a.maker,'_sales-tagging.php' as link
 											from sold_units as a
@@ -354,12 +354,12 @@ class UserController extends BaseController
 											SELECT 'Settle Refurbishment' as module, sta.id, sta.status, sta.approver, CONCAT(usr.firstname,' ', usr.lastname) as requestor, sta.maker AS created_by, '_refurbish-process.php' as link
 											FROM refurbish_processes sta
 											inner join users usr on usr.id = sta.maker
-											
+
 											union all
 
-											SELECT 
-												'Received Stock Transfer' as module, stu1.id, stu1.is_received AS [status], 
-												(CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END) AS approver, 
+											SELECT
+												'Received Stock Transfer' as module, stu1.id, stu1.is_received AS [status],
+												(CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END) AS approver,
 												CONCAT(usr.firstname,' ', usr.lastname) as requestor, sta1.created_by, '_stock_transfer_received.php' as link
 											FROM (
 												SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
@@ -376,8 +376,8 @@ class UserController extends BaseController
 
 											union all
 
-											SELECT 
-												'Repo Tagging' as module, repo.id, CASE WHEN received.status = 4 THEN 0 ELSE 0 END AS status, received.approver, 
+											SELECT
+												'Repo Tagging' as module, repo.id, CASE WHEN received.status = 4 THEN 0 ELSE 0 END AS status, received.approver,
 												CONCAT(usr.firstname,' ', usr.lastname) as requestor, branch.id AS created_by, 'repo_tagging_approval.php' as link
 											FROM  repo_details repo
 											INNER JOIN recieve_unit_details received on repo.id = received.repo_id
@@ -392,7 +392,7 @@ class UserController extends BaseController
 											from request_refurbishes as a
 											inner join users as c on c.id = a.maker
 											where a.status = 3
-										
+
 										) as notif
 										where notif.status = 0 and CAST(notif.approver AS INT) = CAST((CASE WHEN notif.module IN ('Received Stock Transfer', 'For Settle Refurbishment') THEN :branchid ELSE :approver END) AS INT)
 
@@ -404,16 +404,16 @@ class UserController extends BaseController
 											b.created_by as maker,'_approval-unit.php' as link
 											from recieve_unit_details as a inner join request_approvals b on b.received_unit_id = a.id
 											inner join users as c on c.id = b.approver
-											
+
 											union all
-											
+
 											select 'Repo request refurbish' as module, a.id,a.status,a.approver,CONCAT(c.firstname,' ',c.lastname) as requestor,
 											a.maker,'_refurbish-unit.php' as link
 											from request_refurbishes as a
 											inner join users as c on c.id = a.approver
-											
+
 											union all
-											
+
 											select 'Sales approval' as module, a.id,a.status,a.approver,CONCAT(c.firstname,' ',c.lastname) as requestor,
 											a.maker,'_sales-tagging.php' as link
 											from sold_units as a
@@ -430,7 +430,7 @@ class UserController extends BaseController
 											SELECT 'Stock Transfer' as module, sta.id, sta.status, sta.approver, CONCAT(usr.firstname,' ', usr.lastname) as requestor, sta.created_by, '_stock_transfer.php' as link
 											FROM stock_transfer_approval sta
 											inner join users usr on usr.id = sta.created_by
-										
+
 										) as disapprove
 										where disapprove.status = 2 and disapprove.maker = :maker
 							", $param);
