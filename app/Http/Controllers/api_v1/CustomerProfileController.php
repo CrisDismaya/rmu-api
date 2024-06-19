@@ -2,14 +2,12 @@
 
 namespace App\Http\Controllers\api_v1;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\api_v1\BaseController as BaseController;
 use Illuminate\Http\Request;
 use App\Models\customer_profiling;
-use App\Models\source_of_income;
-use App\Models\nationality;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Yajra\Datatables\Datatables;
 
 class CustomerProfileController extends BaseController
 {
@@ -81,14 +79,29 @@ class CustomerProfileController extends BaseController
         }
     }
 
+    function listOfCustomer(){
+       $customers = customer_profiling::select(
+            '*',
+            DB::raw("CONCAT(firstname,' ',lastname) AS customer_name")
+        )->get();
+        return $customers;
+    }
+
     function customerProfile()
     {
         try {
-            $customers = customer_profiling::select(
-                '*',
-                DB::raw("CONCAT(firstname,' ',lastname) AS customer_name")
-            )->get();
-            return $customers;
+            $stmt = DB::select("SELECT TOP 10000 *,  UPPER(
+                    CONCAT(firstname,
+                        CASE
+                            WHEN middlename != '' THEN CONCAT(' ', middlename, ' ')
+                        ELSE ' ' END, lastname
+                    )
+                ) AS customer_name FROM customer_profile");
+            $datatables = Datatables::of($stmt);
+
+            return $datatables->make(true);
+
+
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }

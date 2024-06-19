@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers\api_v1;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\api_v1\BaseController as BaseController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Models\branch;
@@ -18,6 +16,7 @@ use App\Models\stock_transfer;
 use App\Models\stock_transfer_units;
 use App\Models\approval_matrix_setting;
 use App\Http\Traits\helper;
+use Yajra\Datatables\Datatables;
 
 class StockTransferContoller extends BaseController
 {
@@ -47,8 +46,8 @@ class StockTransferContoller extends BaseController
 	{
 		try {
 			return DB::select(
-				"SELECT 
-						rud.id, brd.brandname, rep.model_engine, rep.model_chassis, clr.name AS color_name, 
+				"SELECT
+						rud.id, brd.brandname, rep.model_engine, rep.model_chassis, clr.name AS color_name,
 						rep.plate_number, UPPER(mdl.model_name) AS model_name
 					FROM repo_details rep
 					INNER JOIN recieve_unit_details rud ON rep.id = rud.repo_id AND rep.branch_id = rud.branch
@@ -56,7 +55,7 @@ class StockTransferContoller extends BaseController
 					LEFT JOIN unit_models AS mdl ON rep.model_id = mdl.id
 					LEFT JOIN unit_colors AS clr ON rep.color_id = clr.id
 					LEFT JOIN (
-						SELECT 
+						SELECT
 							sub.approvalid, sub.recievedid, sta1.status AS approvalstatus,
 							CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END AS current_branch
 						FROM (
@@ -70,14 +69,14 @@ class StockTransferContoller extends BaseController
 					LEFT JOIN sold_units sld ON rep.id = sld.repo_id AND rep.branch_id = sld.branch
 					LEFT JOIN request_refurbishes ref ON rep.id = ref.repo_id AND rep.branch_id = ref.branch
 					LEFT JOIN (
-						SELECT 
+						SELECT
 							repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
 						FROM repo_details repo
 						LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
 						INNER JOIN (
 							SELECT * FROM files WHERE isRequired = 1 AND status = 1
-						) files ON upload.files_id = files.id 
-						WHERE upload.is_deleted = 0 
+						) files ON upload.files_id = files.id
+						WHERE upload.is_deleted = 0
 						GROUP BY repo.id, upload.branch_id
 					) files ON files.repo_id = rep.id
 					WHERE rud.status NOT IN (4) AND UPPER(rud.is_sold) = 'N' AND rep.branch_id = ?
@@ -116,31 +115,18 @@ class StockTransferContoller extends BaseController
 				);
 
 			if (Auth::user()->userrole == 'Verifier' || Auth::user()->userrole == 'General Manager') {
-				$list = $list->where('sta.approver', Auth::user()->id)->orderBy('sta.id', 'desc')->get();
-			} else if (Auth::user()->userrole == 'Warehouse Custodian') {
-				$list = $list->where('sta.from_branch', Auth::user()->branch)->orderBy('sta.id', 'desc')->get();
-			} else {
-				$list = $list->orderBy('sta.id', 'desc')->get();
+				$stmt = $list->where('sta.approver', Auth::user()->id)->orderBy('sta.id', 'desc')->get();
+			}
+            else if (Auth::user()->userrole == 'Warehouse Custodian') {
+				$stmt = $list->where('sta.from_branch', Auth::user()->branch)->orderBy('sta.id', 'desc')->get();
+			}
+            else {
+				$stmt = $list->orderBy('sta.id', 'desc')->get();
 			}
 
-			$count = 0;
-			$get_approvers = approval_matrix_setting::where('module_id', '=', $moduleid)->get();
-			foreach ($get_approvers as $approvers) {
-				foreach ($approvers->signatories as $approver) {
-					if (Auth::user()->id == $approver['user']) {
-						$count++;
-					}
-				}
-			}
+            $datatables = Datatables::of($stmt);
+            return $datatables->make(true);
 
-			$role = '';
-			if ($count > 0) {
-				$role = 'Approver';
-			} else {
-				$role = 'Maker';
-			}
-
-			return response()->json(['data' => $list, 'userrole' => Auth::user()->userrole, 'role' => $role]);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -150,17 +136,17 @@ class StockTransferContoller extends BaseController
 	{
 		try {
 			return DB::select(
-				"SELECT 
-					rud.id, brd.brandname, rep.model_engine, rep.model_chassis, clr.name AS color_name, 
+				"SELECT
+					rud.id, brd.brandname, rep.model_engine, rep.model_chassis, clr.name AS color_name,
 					rep.plate_number, UPPER(mdl.model_name) AS model_name,
 					rep.date_sold, lst.date_surrender, DATEDIFF(day, rep.date_sold, lst.date_surrender) AS aging_unit_days,
 					rep.id AS repo_id
-				FROM stock_transfer_approval sta 
+				FROM stock_transfer_approval sta
 				INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
 				INNER JOIN recieve_unit_details rud ON stu.recieved_unit_id = rud.id
 				INNER JOIN repo_details AS rep ON rud.repo_id = rep.id
 				LEFT JOIN (
-					SELECT 
+					SELECT
 						MAX(brand_id) AS brand_id, MAX(model_id) AS model_id, MAX(date_surrender) AS date_surrender
 					FROM repo_details
 					GROUP BY brand_id, model_id
@@ -285,7 +271,7 @@ class StockTransferContoller extends BaseController
 	{
 		try {
 			return DB::select(
-				"SELECT 
+				"SELECT
 					sta.reference_code, brh.name AS branch_name, CONCAT(cus.firstname,' ',cus.lastname) AS customer_name,
 					brd.brandname, mdl.model_name, UPPER(rep.model_engine) AS engine, UPPER(rep.model_chassis) AS chassis,
 					CASE WHEN stu.is_received = 0 AND stu.is_use_old_files = 0 THEN 'NO DECISION' ELSE 'WITH DECISION' END  AS received_status,
@@ -314,9 +300,9 @@ class StockTransferContoller extends BaseController
 			$response = [];
 			$files_info = DB::select(
 				"SELECT * FROM (
-					SELECT 
+					SELECT
 						MIN(id) AS min_id, MAX(id) AS max_id, branch_id, reference_id AS repo_id, CAST(created_at AS DATE) AS dates
-					FROM files_uploaded 
+					FROM files_uploaded
 					GROUP BY branch_id, reference_id, CAST(created_at AS DATE)
 				) AS sub
 				WHERE sub.repo_id = :repoid
@@ -377,22 +363,22 @@ class StockTransferContoller extends BaseController
 	function getTransferredUnits()
 	{
 		try {
-			return DB::select(
-				"WITH 
+		    $stmt = DB::select(
+				"WITH
 				receives AS (
-					SELECT 
+					SELECT
 						ROW_NUMBER() OVER ( PARTITION BY rud.repo_id ORDER BY rud.repo_id ) AS row_num,
 						rud.id AS origin_id
 					FROM recieve_unit_details rud
 					LEFT JOIN stock_transfer_unit stu ON rud.id = stu.recieved_unit_id AND stu.is_received = 1
 				)
-			
+
 				SELECT reps.*, ruds.id AS origin,
 					compareid_to = (SELECT origin_id FROM receives rev WHERE rev.row_num = revs.row_num - 1)
 				FROM receives revs
 				INNER JOIN recieve_unit_details ruds ON revs.origin_id = ruds.id
 				LEFT JOIN (
-					SELECT 
+					SELECT
 						rep.id AS reps_id, cus.acumatica_id, UPPER(CONCAT(cus.firstname,' ',cus.middlename,' ',cus.lastname)) AS customer_name,
 						brd.brandname, UPPER(mdl.model_name) AS model_name, rep.model_engine, rep.model_chassis, clr.name AS color_name, rep.plate_number
 					FROM repo_details rep
@@ -406,6 +392,9 @@ class StockTransferContoller extends BaseController
 				WHERE stus.is_received = 1 AND stas.to_branch = ?",
 				array(Auth::user()->branch)
 			);
+
+            $datatables = Datatables::of($stmt);
+            return $datatables->make(true);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -427,7 +416,7 @@ class StockTransferContoller extends BaseController
 	{
 		try {
 			return DB::select(
-				"SELECT 
+				"SELECT
 					rups.*, prts.inventory_code, prts.name
 				FROM recieve_unit_details ruds
 				INNER JOIN recieve_unit_spare_parts rups ON ruds.id = rups.recieve_id AND rups.is_deleted = 0

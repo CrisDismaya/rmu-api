@@ -14,12 +14,13 @@ use Illuminate\Http\Request;
 use App\Http\Traits\helper;
 use App\Http\Traits\resuableQuery;
 use Carbon\Carbon;
-use App\Models\approval_matrix_setting;
+use Yajra\Datatables\Datatables;
 
 class RequestRefurbishController extends BaseController
 {
 	//
 	use helper, resuableQuery;
+
 	public function listOfForRefurbish()
 	{
 
@@ -33,7 +34,7 @@ class RequestRefurbishController extends BaseController
 				array_push($list_id, $repo->repo_id);
 			}
 
-			$received_units = DB::table('recieve_unit_details AS rud')
+			$data = DB::table('recieve_unit_details AS rud')
 				->join('repo_details as repo', 'repo.id', 'rud.repo_id')
 				->join('branches as br', 'repo.branch_id', 'br.id')
 				->join('brands as brd', 'repo.brand_id', 'brd.id')
@@ -69,6 +70,7 @@ class RequestRefurbishController extends BaseController
 				->where('rud.status', '!=', '4')
 				->where('rud.is_sold', '=', 'N')
 				->whereRaw('ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)')
+				->whereRaw('ISNULL((SELECT COUNT(*) FROM recieve_unit_spare_parts WHERE recieve_id = 1 AND is_deleted = 0 AND refurb_id IS NULL), 0) > 0')
 				->whereNotExists(function ($query) {
 					$query->select(DB::raw(1))
 						->from('sold_units')
@@ -89,19 +91,19 @@ class RequestRefurbishController extends BaseController
 						->join('stock_transfer_approval as b', 'b.id', 'a.stock_transfer_id')
 						->whereRaw('a.recieved_unit_id = rud.id')
 						->whereRaw('b.status = 0');
-				});
+            });
+
 			if (Auth::user()->userrole != 'Warehouse Custodian') {
-				$received_units = $received_units->whereNotIn('repo.id', $list_id);
+				$stmt = $data->whereNotIn('repo.id', $list_id)->get();
 			} else {
-				$received_units = $received_units
+				$stmt = $data
 					->whereNotIn('repo.id', $list_id)
-					->where('repo.branch_id', Auth::user()->branch);
+					->where('repo.branch_id', Auth::user()->branch)->get();
 			}
 
-			$received_units = $received_units->get();
+            $datatables = Datatables::of($stmt);
 
-			$data = ['data' => $received_units, 'role' =>  'Maker'];
-			return $data;
+            return $datatables->make(true);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -610,8 +612,22 @@ class RequestRefurbishController extends BaseController
 
 		try {
 
-			$refurbish_request = DB::table('repo_details as repo')
-				// ->join('request_refurbishes as refurbish','refurbish.repo_id','repo.id')
+            $cteQuery = $this->cteQuery();
+
+            $role = DB::select("
+                DECLARE @module INT = :module, @userId INT = :userId;
+                {$cteQuery}
+
+                SELECT
+                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
+                        WHEN 1 THEN 'Approver'
+                        ELSE 'Maker'
+                    END AS roles
+                ",
+                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
+            );
+
+			$data = DB::table('repo_details as repo')
 				->join('request_refurbishes as refurbish', function ($join) {
 					$join->on('repo.id', '=', 'refurbish.repo_id');
 					$join->on('repo.branch_id', '=', 'refurbish.branch');
@@ -639,41 +655,22 @@ class RequestRefurbishController extends BaseController
 					'refurbish.remarks',
 					DB::raw('CONCAT(holder.firstname,holder.middlename,holder.lastname) as current_holder'),
 					DB::raw('CONCAT(req.firstname,req.middlename,req.lastname) as requestor')
-				);
-			// ->whereIn('refurbish.status',['0','2'])
-			// ->where('refurbish.approver',Auth::user()->id)
-			// ->get();
+            );
 
-			$count = 0;
-			$get_approvers = approval_matrix_setting::where('module_id', $moduleid)->get();
-			foreach ($get_approvers as $approvers) {
-
-				foreach ($approvers->signatories as $approver) {
-
-					if (Auth::user()->id == $approver['user']) {
-						$count++;
-					}
-				}
-			}
-
-			$role = '';
-
-			if ($count > 0) {
-				$role = 'Approver';
-				$refurbish_request = $refurbish_request->where('refurbish.status', '0')->where('refurbish.approver', Auth::user()->id)->get();
-			} else {
-				$role = 'Maker';
-
-				$check = request_refurbish::where('maker', Auth::user()->id)->count();
-
-				if ($check > 0) {
-					$refurbish_request = $refurbish_request->where('refurbish.maker', Auth::user()->id);
+            if($role[0]->roles == 'Approver'){
+                $stmt = $data->where('refurbish.status', '0')->where('refurbish.approver', Auth::user()->id)->get();
+            }
+            else {
+                $check = request_refurbish::where('maker', Auth::user()->id)->count();
+                if ($check > 0) {
+					$stmt = $data->where('refurbish.maker', Auth::user()->id);
 				}
 
-				$refurbish_request = $refurbish_request->whereIn('refurbish.status', ['0', '2'])->get();
-			}
-			$data = ['data' => $refurbish_request, 'role' =>  $role];
-			return $data;
+                $stmt = $data->whereIn('refurbish.status', ['0', '2'])->get();
+            }
+            $datatables = Datatables::of($stmt);
+
+            return $datatables->make(true);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -754,13 +751,9 @@ class RequestRefurbishController extends BaseController
                 ",
                 [ 'role' => $role[0]->roles, 'userId' =>  Auth::user()->id ]
             );
+            $datatables = Datatables::of($stmt);
 
-            return response()->json(
-                [
-                    'data' => $stmt,
-                    'role' =>  $role[0]->roles
-                ]
-            );
+            return $datatables->make(true);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -955,7 +948,7 @@ class RequestRefurbishController extends BaseController
 	{
 		try {
 
-			$received_units = DB::table('repo_details as repo')
+			$data = DB::table('repo_details as repo')
 				->join('branches as br', 'repo.branch_id', 'br.id')
 				->join('brands as brd', 'repo.brand_id', 'brd.id')
 				->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
@@ -980,15 +973,17 @@ class RequestRefurbishController extends BaseController
                     WHEN refurbish.status = '3' THEN 'ON GOING REFURBISH'
                     WHEN refurbish.status = '4' THEN 'DONE'
                     ELSE 'DISAPPROVED' END status"),
-				);
+            );
 
 			if (Auth::user()->userrole == 'Warehouse Custodian') {
-				$received_units = $received_units->where('refurbish.branch', Auth::user()->branch)->get();
+				$stmt = $data->where('refurbish.branch', Auth::user()->branch)->get();
 			} else {
-				$received_units = $received_units->get();
+				$stmt = $data->get();
 			}
+			return $stmt;
 
-			return $received_units;
+            // $datatables = Datatables::of($stmt);
+            // return $datatables->make(true);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -1040,11 +1035,9 @@ class RequestRefurbishController extends BaseController
                 ) cost ON repo.id = cost.repo_id"
             );
 
-            return response()->json(
-                [
-                    "data" => $stmt
-                ]
-            );
+            $datatables = Datatables::of($stmt);
+
+            return $datatables->make(true);
 
         } catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);

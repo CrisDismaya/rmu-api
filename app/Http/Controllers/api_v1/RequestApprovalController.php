@@ -17,9 +17,8 @@ use App\Http\Traits\acumaticaService;
 use App\Http\Traits\resuableQuery;
 use Carbon\Carbon;
 use App\Models\approval_matrix_setting;
-use App\Models\request_refurbish;
-use App\Models\refurbish_detail;
 use App\Models\appraisal_history;
+use Yajra\Datatables\Datatables;
 
 class RequestApprovalController extends BaseController
 {
@@ -168,13 +167,9 @@ class RequestApprovalController extends BaseController
                 ",
                 [ 'roleName' => Auth::user()->userrole, 'branchId' => Auth::user()->branch ]
             );
+            $datatables = Datatables::of($stmt);
 
-            return response()->json(
-                [
-                    'data' => $stmt,
-                    'role' =>  'Maker'
-                ]
-            );
+            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -309,12 +304,9 @@ class RequestApprovalController extends BaseController
                 [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
             );
 
-            return response()->json(
-                [
-                    'data' => $stmt,
-                    'role' =>  $role[0]->roles
-                ]
-            );
+            $datatables = Datatables::of($stmt);
+
+            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -325,7 +317,7 @@ class RequestApprovalController extends BaseController
 
         try {
 
-            $received_units = DB::table('repo_details as repo')
+            $data = DB::table('repo_details as repo')
                 ->join('branches as br', 'repo.branch_id', 'br.id')
                 ->join('brands as brd', 'repo.brand_id', 'brd.id')
                 ->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
@@ -361,16 +353,17 @@ class RequestApprovalController extends BaseController
                     'sold_unit.maker',
                     'sold_unit.approver',
                     'sold_unit.status'
-                )->where('sold_unit.status', '1');
+                )
+            ->where('sold_unit.status', '1');
 
             if (Auth::user()->userrole == 'Warehouse Custodian') {
-                $received_units = $received_units->where('repo.branch_id', Auth::user()->branch)->get();
+                $stmt = $data->where('repo.branch_id', Auth::user()->branch)->get();
             } else {
-                $received_units = $received_units->get();
+                $stmt = $data->get();
             }
+            $datatables = Datatables::of($stmt);
 
-
-            return $received_units;
+            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -380,8 +373,22 @@ class RequestApprovalController extends BaseController
     {
 
         try {
+            $cteQuery = $this->cteQuery();
 
-            $received_units = DB::table('repo_details as repo')
+            $role = DB::select("
+                DECLARE @module INT = :module, @userId INT = :userId;
+                {$cteQuery}
+
+                SELECT
+                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
+                        WHEN 1 THEN 'Approver'
+                        ELSE 'Maker'
+                    END AS roles
+                ",
+                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
+            );
+
+            $data = DB::table('repo_details as repo')
                 ->join('branches as br', 'repo.branch_id', 'br.id')
                 ->join('brands as brd', 'repo.brand_id', 'brd.id')
                 ->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
@@ -413,7 +420,7 @@ class RequestApprovalController extends BaseController
                     'sold_unit.ExternalReference',
                     'sold_unit.AgentID',
                     DB::raw("CASE WHEN sold_unit.sale_type = 'C' THEN 'CASH'
-            WHEN sold_unit.sale_type = 'I' THEN 'INSTALLMENT' END sale_type"),
+                        WHEN sold_unit.sale_type = 'I' THEN 'INSTALLMENT' END sale_type"),
                     'sold_unit.srp as approved_price',
                     'sold_unit.dp',
                     'sold_unit.monthly_amo',
@@ -430,35 +437,16 @@ class RequestApprovalController extends BaseController
                     'sold_unit.interest_rate',
                     'sold_unit.file_name',
                     'sold_unit.path'
-                );
+            );
 
-            $count = 0;
-            $get_approvers = approval_matrix_setting::where('module_id', $moduleid)->get();
-            foreach ($get_approvers as $approvers) {
-
-                foreach ($approvers->signatories as $approver) {
-
-                    if (Auth::user()->id == $approver['user']) {
-                        $count++;
-                    }
-                }
-            }
-
-            $role = '';
-
-            if ($count > 0) {
-                $role = 'Approver';
-                $received_units = $received_units->where('sold_unit.status', '0')->where('sold_unit.approver', Auth::user()->id)->get();
+            if ($role[0]->roles == 'Approver') {
+                $stmt = $data->where('sold_unit.status', '0')->where('sold_unit.approver', Auth::user()->id)->get();
             } else {
-                $role = 'Maker';
-
-                $received_units = $received_units->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.maker', Auth::user()->id)->get();
+                $stmt = $data->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.maker', Auth::user()->id)->get();
             }
-            $data = ['data' => $received_units, 'role' =>  $role];
-            return $data;
+            $datatables = Datatables::of($stmt);
 
-
-            return $received_units;
+            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -593,8 +581,9 @@ class RequestApprovalController extends BaseController
                 [ 'roleName' => Auth::user()->userrole, 'branchId' => Auth::user()->branch ]
             );
 
+            $datatables = Datatables::of($stmt);
 
-            return response()->json($stmt);
+            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -766,13 +755,9 @@ class RequestApprovalController extends BaseController
                 )",
                 [ 'roleName' => Auth::user()->userrole, 'branchId' => Auth::user()->branch, 'requestBranchId' => $request->branchId ]
             );
+            $datatables = Datatables::of($stmt);
 
-            return response()->json(
-                [
-                    'data' => $stmt,
-                    'role' => Auth::user()->userrole
-                ]
-            );
+            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }

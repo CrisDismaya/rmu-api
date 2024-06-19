@@ -117,6 +117,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			//customer profile
 			Route::post('createCustomerProfile', [CustomerProfileController::class, 'createCustomerProfile']);
 			Route::get('customerProfile', [CustomerProfileController::class, 'customerProfile']);
+			Route::get('listOfCustomer', [CustomerProfileController::class, 'listOfCustomer']);
 			Route::post('updateCustomerProfile/{id}', [CustomerProfileController::class, 'updateCustomerProfile']);
 			Route::get('customerProfilePerId/{id}', [CustomerProfileController::class, 'customerProfilePerId']);
 			//customer address
@@ -126,7 +127,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('customer/source_of_income', [CustomerProfileController::class, 'source_of_income']);
 			Route::get('customer/nationality', [CustomerProfileController::class, 'nationality']);
 
-			//repo details
+			//repo detailsallReceivedUnit
 			Route::post('createRepo', [RepoController::class, 'createRepo']);
 			Route::get('repo', [RepoController::class, 'repo']);
 			Route::get('repoDetailsPerId/{id}/{moduleid}', [RepoController::class, 'repoDetailsPerId']);

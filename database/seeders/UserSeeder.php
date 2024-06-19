@@ -51,7 +51,7 @@ class UserSeeder extends Seeder
 				'updated_at' => Carbon::now(),
 			]);
 		DB::unprepared('SET IDENTITY_INSERT user_role OFF');
-		
+
 		// dafualt user
 		DB::unprepared('SET IDENTITY_INSERT users ON');
 			DB::table('users')->insert([
@@ -60,8 +60,23 @@ class UserSeeder extends Seeder
 				'firstname'       => "Admin",
 				'middlename'       => "",
 				'lastname'       => "Account",
-				'email'   => 'admin@suerte.com',
-				'password'   => Hash::make('admin.suerte'),
+				'email'   => 'rmu.admin@suerte.com',
+				'password'   => Hash::make('rmu.admin@2023*'),
+				'userrole'   => 'Administrator',
+				'branch'   => '1',
+				'status'   => '1',
+				'created_at' => Carbon::now(),
+				'updated_at' => Carbon::now(),
+			]);
+            
+            DB::table('users')->insert([
+				'id'       => "2",
+				'employee_no' => '0',
+				'firstname'       => "RMU Admin",
+				'middlename'       => "",
+				'lastname'       => "Account",
+				'email'   => 'rmu.admin@suerte.com',
+				'password'   => Hash::make('rmu.admin@2023*'),
 				'userrole'   => 'Administrator',
 				'branch'   => '1',
 				'status'   => '1',

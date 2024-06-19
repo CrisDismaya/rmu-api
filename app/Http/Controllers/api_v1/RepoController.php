@@ -15,13 +15,14 @@ use App\Models\receive_unit;
 use App\Models\unit_spare_parts;
 use App\Models\approval_matrix_setting;
 use App\Http\Traits\helper;
+use App\Http\Traits\resuableQuery;
 use Illuminate\Support\Carbon;
-use Intervention\Image\Facades\Image;
+use Yajra\Datatables\Datatables;
 
 class RepoController extends BaseController
 {
 
-	use helper;
+	use helper, resuableQuery;
 
 	public function createRepo(Request $request)
 	{
@@ -302,17 +303,18 @@ class RepoController extends BaseController
 				});
 
 			if (Auth::user()->userrole == 'Warehouse Custodian') {
-				$data = $list_of_repos->where('rep.branch_id', '=', Auth::user()->branch)
+				$stmt = $list_of_repos->where('rep.branch_id', '=', Auth::user()->branch)
 					->where(function ($query) {
 						$query->whereNull('transfer.current_branch')
 							->orWhere(DB::raw("CAST(transfer.current_branch AS INT)"), '=', DB::raw("CAST(rep.branch_id AS INT)"));
 					})
 					->get();
 			} else {
-				$data = $list_of_repos->get();
+				$stmt = $list_of_repos->get();
 			}
+            $datatables = Datatables::of($stmt);
 
-			return $data;
+            return $datatables->make(true);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
@@ -600,8 +602,22 @@ class RepoController extends BaseController
 	public function fetch_repo_approval($moduleid)
 	{
 		try {
+            $cteQuery = $this->cteQuery();
 
-			$list_of_repos = DB::table('repo_details as rep')
+            $role = DB::select("
+                DECLARE @module INT = :module, @userId INT = :userId;
+                {$cteQuery}
+
+                SELECT
+                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
+                        WHEN 1 THEN 'Approver'
+                        ELSE 'Maker'
+                    END AS roles
+                ",
+                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
+            );
+
+			$stmt = DB::table('repo_details as rep')
 				->select(
 					'rep.*',
 					'bth.name AS branch_name',
@@ -628,26 +644,13 @@ class RepoController extends BaseController
 				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
 				->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
 				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
-				->where('rud.status', '=', 4)->where('rud.approver', Auth::user()->id)->get();
+				->where('rud.status', '=', 4)
+            ->where('rud.approver', Auth::user()->id)->get();
 
-			$count = 0;
-			$get_approvers = approval_matrix_setting::where('module_id', '=', $moduleid)->get();
-			foreach ($get_approvers as $approvers) {
-				foreach ($approvers->signatories as $approver) {
-					if (Auth::user()->id == $approver['user']) {
-						$count++;
-					}
-				}
-			}
+            $datatables = Datatables::of($stmt);
 
-			$role = '';
-			if ($count > 0) {
-				$role = 'Approver';
-			} else {
-				$role = 'Maker';
-			}
-			$data = ['data' => $list_of_repos, 'role' =>  $role];
-			return $data;
+            return $datatables->make(true);
+
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
