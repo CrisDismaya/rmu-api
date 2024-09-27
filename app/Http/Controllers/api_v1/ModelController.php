@@ -72,15 +72,13 @@ class ModelController extends BaseController
         }
     }
 
-    public function mapColors($modelid)
+    public function mapColors()
     {
 
         try {
 
             $query = DB::table('unit_colors as a')
-                ->join('color_mappings as b', 'b.color_id', 'a.id')
                 ->select('a.*')
-                ->where('b.model_id', $modelid)
                 ->get();
             return $query;
         } catch (\Throwable $th) {

@@ -89,7 +89,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('models', [ModelController::class, 'models']);
 			Route::post('updateModel/{id}', [ModelController::class, 'updateModel']);
 			Route::get('modelPerBrand/{id}', [ModelController::class, 'modelPerBrand']);
-			Route::get('getMapColor/{modelid}', [ModelController::class, 'mapColors']);
+			Route::get('getMapColor', [ModelController::class, 'mapColors']);
 
 			//partslistForSalesTagging
 			Route::post('createParts', [PartsController::class, 'createParts']);
