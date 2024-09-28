@@ -32,24 +32,8 @@ use App\Http\Controllers\api_v1\RequestRefurbishController;
 |
 */
 
-// Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-//     return $request->user();
-// });
-
-
-
-// Route::group(['middleware' => ['web']], function () {
-// //generate csrf token in able to use it in sending request
-//    Route::get('get_csrf',function(){
-//       return response()->json(['csrf_token' => csrf_token()]);
-//    });
-
-// });
-
-
 Route::post('login', [UserController::class, 'login']);
 Route::get('generateReport/{formtype}/{id}/{src}', [ReportController::class, 'generateReport']);
-// Route::get('checking', [RequestApprovalController::class, 'checking']);
 
 Route::middleware('auth:sanctum')->group( function () {
 
