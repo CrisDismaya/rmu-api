@@ -9,6 +9,7 @@ use App\Models\unit_model;
 use App\Models\color_mapping;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ModelController extends BaseController
 {
@@ -42,15 +43,15 @@ class ModelController extends BaseController
             $brand = new unit_model;
             $brand->brand_id = $request->brand_id;
             $brand->model_name = $request->model_name;
-            $brand->inventory_code = str_contains($request->code, 'RE-') ? $request->code : 'RE-'.$request->code ;
+            $brand->inventory_code = Str::startsWith(trim($request->code), 'RE-') ? trim($request->code) : 'RE-' . trim($request->code);
             $brand->save();
 
-            foreach ($request->colors as $color) {
-                $map_color = new color_mapping;
-                $map_color->color_id = $color['value'];
-                $map_color->model_id = $brand->id;
-                $map_color->save();
-            }
+            // foreach ($request->colors as $color) {
+            //     $map_color = new color_mapping;
+            //     $map_color->color_id = $color['value'];
+            //     $map_color->model_id = $brand->id;
+            //     $map_color->save();
+            // }
 
             DB::commit();
 
@@ -103,18 +104,20 @@ class ModelController extends BaseController
 
             DB::beginTransaction();
 
-            $request->code = str_contains($request->code, 'RE-') ? $request->code : 'RE-'.$request->code ;
+            $brand = unit_model::where('id', $id)->update([
+                'brand_id' => $request->brand_id,
+                'inventory_code' => Str::startsWith(trim($request->code), 'RE-') ? trim($request->code) : 'RE-' . trim($request->code),
+                'model_name' => $request->model_name
+            ]);
 
-            $brand = unit_model::where('id', $id)->update(['brand_id' => $request->brand_id, 'inventory_code' => $request->code, 'model_name' => $request->model_name]);
+            // $remove_existing = color_mapping::where('model_id', $id)->delete();
 
-            $remove_existing = color_mapping::where('model_id', $id)->delete();
-
-            foreach ($request->colors as $color) {
-                $map_color = new color_mapping;
-                $map_color->color_id = $color['value'];
-                $map_color->model_id = $id;
-                $map_color->save();
-            }
+            // foreach ($request->colors as $color) {
+            //     $map_color = new color_mapping;
+            //     $map_color->color_id = $color['value'];
+            //     $map_color->model_id = $id;
+            //     $map_color->save();
+            // }
 
             DB::commit();
 
