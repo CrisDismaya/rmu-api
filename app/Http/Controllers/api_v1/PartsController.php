@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\spare_parts;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class PartsController extends BaseController
 {
@@ -97,14 +98,30 @@ class PartsController extends BaseController
 
     public function partsPerModel()
     {
-
         try {
+            // Retrieve data from the cache
+            $cachedData = Cache::get('parts_per_model');
 
-            return DB::table('spare_parts')
-                ->select('id as value', 'name as label')
+            // Check if cache exists and the count matches the current database count
+            if ($cachedData && count($cachedData) === DB::table('spare_parts')->where('status', '=', 'A')->where('name', '!=', '')->count()) {
+                return $cachedData;
+            }
+
+            // If cache is empty or counts don't match, update the cache
+            $newData = DB::table('spare_parts')
+                ->selectRaw("
+                    id as value,
+                    TRIM(name) as label
+                ")
                 ->where('status', '=', 'A')
+                ->where('name', '!=', '')
                 ->orderBy('name', 'ASC')
                 ->get();
+
+            // Cache the new data for 14400 minutes
+            Cache::put('parts_per_model', $newData, 14400);
+
+            return $newData;
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }

@@ -22,7 +22,7 @@ class CreateRepoDetailsTable extends Migration
             $table->string('model_engine');
             $table->string('model_chassis');
             $table->integer('color_id');
-            $table->string('plate_number');
+            $table->string('plate_number')->nullable();
             $table->string('mv_file_number')->nullable();
             $table->integer('year_model');
             $table->string('orcr_status');
