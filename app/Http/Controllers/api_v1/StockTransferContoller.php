@@ -17,6 +17,7 @@ use App\Models\stock_transfer_units;
 use App\Models\approval_matrix_setting;
 use App\Http\Traits\helper;
 use Yajra\Datatables\Datatables;
+use Illuminate\Support\Facades\Log;
 
 class StockTransferContoller extends BaseController
 {
@@ -270,7 +271,7 @@ class StockTransferContoller extends BaseController
 	function getAllReceiveStockTransfer()
 	{
 		try {
-			return DB::select(
+			$stmt = DB::select(
 				"SELECT
 					sta.reference_code, brh.name AS branch_name, CONCAT(cus.firstname,' ',cus.lastname) AS customer_name,
 					brd.brandname, mdl.model_name, UPPER(rep.model_engine) AS engine, UPPER(rep.model_chassis) AS chassis,
@@ -289,6 +290,10 @@ class StockTransferContoller extends BaseController
 				WHERE sta.status = 1 AND stu.is_received = 0 AND sta.to_branch = ?",
 				array(Auth::user()->branch)
 			);
+			
+			$datatables = Datatables::of($stmt);
+            return $datatables->make(true);
+			
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
