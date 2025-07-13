@@ -40,6 +40,7 @@ class repo extends Model
         'msuisva_form_no',
         'times_repossessed',
         'repossessed_exowner',
+        'transaction_number_inventory_in',
     ];
 
     function branch_details(){

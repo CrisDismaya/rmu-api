@@ -14,16 +14,18 @@ use App\Models\receive_unit;
 use App\Models\sold_unit;
 use App\Http\Traits\helper;
 use App\Http\Traits\acumaticaService;
-use App\Http\Traits\resuableQuery;
+use App\Http\Traits\ResuableQuery;
 use Carbon\Carbon;
 use App\Models\approval_matrix_setting;
 use App\Models\appraisal_history;
-use Yajra\Datatables\Datatables;
+use Yajra\DataTables\Facades\DataTables;
+use App\Http\Traits\TransactionNumberGenerator;
 
 class RequestApprovalController extends BaseController
 {
     //
-    use helper, acumaticaService, resuableQuery; //helper traits
+    use helper, acumaticaService, ResuableQuery; //helper traits
+    use TransactionNumberGenerator;
 
     public function listReceivedUnit()
     {
@@ -389,19 +391,9 @@ class RequestApprovalController extends BaseController
             );
 
             $data = DB::table('repo_details as repo')
-                ->join('branches as br', 'repo.branch_id', 'br.id')
-                ->join('brands as brd', 'repo.brand_id', 'brd.id')
-                ->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
-                ->join('unit_colors as color', 'repo.color_id', 'color.id')
-                ->join('customer_profile as old_owner', 'repo.customer_acumatica_id', 'old_owner.id')
-                // ->join('sold_units as sold_unit', 'repo.id', 'sold_unit.repo_id')
-                ->join('sold_units as sold_unit', function ($join) {
-                    $join->on('repo.id', '=', 'sold_unit.repo_id');
-                    $join->on('repo.branch_id', '=', 'sold_unit.branch');
-                })
-                ->join('customer_profile as new_owner', 'sold_unit.new_customer', 'new_owner.id')
                 ->select(
                     'sold_unit.id',
+                    'sold_unit.transaction_number',
                     'repo.id as repo_id',
                     'repo.model_engine',
                     'repo.model_chassis',
@@ -437,22 +429,37 @@ class RequestApprovalController extends BaseController
                     'sold_unit.interest_rate',
                     'sold_unit.file_name',
                     'sold_unit.path'
-            );
+                )
+                ->join('branches as br', 'repo.branch_id', 'br.id')
+                ->join('brands as brd', 'repo.brand_id', 'brd.id')
+                ->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
+                ->join('unit_colors as color', 'repo.color_id', 'color.id')
+                ->join('customer_profile as old_owner', 'repo.customer_acumatica_id', 'old_owner.id')
+                // ->join('sold_units as sold_unit', 'repo.id', 'sold_unit.repo_id')
+                ->join('sold_units as sold_unit', function ($join) {
+                    $join->on('repo.id', '=', 'sold_unit.repo_id');
+                    $join->on('repo.branch_id', '=', 'sold_unit.branch');
+                })
+                ->join('customer_profile as new_owner', 'sold_unit.new_customer', 'new_owner.id');
 
             if ($role[0]->roles == 'Approver') {
-                $stmt = $data->where('sold_unit.status', '0')->where('sold_unit.approver', Auth::user()->id)->get();
+                $data->where('sold_unit.status', '0')->where('sold_unit.approver', Auth::user()->id);
             } else {
-                $stmt = $data->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.maker', Auth::user()->id)->get();
+                $data->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.maker', Auth::user()->id);
             }
-            $datatables = Datatables::of($stmt);
 
-            return $datatables->make(true);
+            return Datatables::of($data)
+                ->order(function ($q) {
+                    $q->orderByDesc('sold_unit.created_at');
+                })
+                ->make(true);
+
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
     }
 
-    public function listForSalesTagging()
+    public function listForSalesTagging(Request $request)
     {
         try {
             $cteQuery = $this->cteQuery();
@@ -577,13 +584,13 @@ class RequestApprovalController extends BaseController
                                     )
                             )
                         )
+                ORDER BY repo.created_at DESC
                 ",
                 [ 'roleName' => Auth::user()->userrole, 'branchId' => Auth::user()->branch ]
             );
 
-            $datatables = Datatables::of($stmt);
+            return  Datatables::of($stmt)->make(true);
 
-            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -600,6 +607,7 @@ class RequestApprovalController extends BaseController
 
                 SELECT distinct
                     repo.id AS repo_id,
+                    repo.transaction_number_inventory_in AS transacton_number,
                     repo.msuisva_form_no AS msuisva,
                     repo.model_engine,
                     repo.model_chassis,
@@ -752,7 +760,8 @@ class RequestApprovalController extends BaseController
                     (@roleName = 'Warehouse Custodian' AND repo.branch_id = @branchId) OR
                     (@roleName != 'Warehouse Custodian' AND @requestBranchId != 0 AND repo.branch_id = @requestBranchId) OR
                     (@roleName != 'Warehouse Custodian' AND @requestBranchId = 0)
-                )",
+                )
+                ORDER BY repo.created_at DESC",
                 [ 'roleName' => Auth::user()->userrole, 'branchId' => Auth::user()->branch, 'requestBranchId' => $request->branchId ]
             );
             $datatables = Datatables::of($stmt);
@@ -1256,8 +1265,14 @@ class RequestApprovalController extends BaseController
                     }
                 }
 
+
                 $create->save();
                 $rec_id = $create->id;
+
+
+                $transactionNo = $this->generateTransactionNumber('sales', $create->id, $create->created_at);
+                $create->transaction_number = $transactionNo;
+                $create->save();
             }
 
             $matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $rec_id);
@@ -1307,6 +1322,7 @@ class RequestApprovalController extends BaseController
                     // if ($boolean) {
                         receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
                         sold_unit::where('id', $request->id)->update(['status' => $request->status]);
+                        $this->generateTransactionNumberInventoryOut('sold_unit', $request->id);
                     // }
                 }
                 $sequence = $fetch_sequence;

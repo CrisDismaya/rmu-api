@@ -176,6 +176,8 @@
 
 <body>
     <?php
+        $transactionNumber = $data['transactionNumber'];
+
         $dataExtract = $data['datas'];
         $info = json_decode($dataExtract);
 
@@ -183,7 +185,7 @@
         $approver = json_decode($dataHistory);
 
         function formatToMoney($number) {
-            return number_format($number, 2, '.', ',');
+            return number_format(floatval($number), 2, '.', ',');
         }
     ?>
 
@@ -239,7 +241,7 @@
                 <td class="text-center" colspan="10" rowspan="1">
                     <img src="{{ public_path('image/logo.jpg') }}" width="85%" height="8%"  alt="">
                 </td>
-                <td class="text-center" colspan="26">refurbishUnitList
+                <td class="text-center" colspan="26">
                     <span class="text-bold" style="font-size: 19px"> Trans Asiatic Finance Incorporated </span><br>
                     <span style="font-size: 11px">
                         Unit 13, 2nd Floor Beacon Commercila Place, Apollo 3, Moonwalk Village, Las Piñas City <br>

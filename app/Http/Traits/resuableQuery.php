@@ -4,7 +4,7 @@ namespace App\Http\Traits;
 
 use Illuminate\Support\Facades\DB;
 
-trait resuableQuery {
+trait ResuableQuery {
 
     public function cteQuery(){
 

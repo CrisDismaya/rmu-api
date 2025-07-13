@@ -12,14 +12,14 @@ use App\Models\User;
 use App\Models\approval_matrix_setting;
 use App\Models\user_role;
 use App\Models\system_menu;
-use App\Http\Traits\resuableQuery;
+use App\Http\Traits\ResuableQuery;
 
 
 
 class UserController extends BaseController
 {
 	//
-    use resuableQuery; //helper traits
+    use ResuableQuery; //helper traits
 
 	public function getRoles()
 	{

@@ -3,14 +3,16 @@
 namespace App\Http\Controllers\api_v1;
 
 use App\Http\Controllers\api_v1\BaseController as BaseController;
-use App\Http\Traits\resuableQuery;
+use App\Http\Traits\ResuableQuery;
 use Illuminate\Support\Facades\DB;
 use PDF;
+use App\Http\Traits\TransactionNumberGenerator;
+use Illuminate\Support\Facades\Log;
 
 class ReportController extends BaseController
 {
-	//
-    use resuableQuery; //traits
+	// traits
+    use ResuableQuery, TransactionNumberGenerator;
 
 	public function generateReport($formType, $recordId, $src)
 	{
@@ -103,7 +105,8 @@ class ReportController extends BaseController
                 ), 0) AS settled_total_cost,
                 UPPER(repo.apprehension) AS apprehension,
                 repo.apprehension_description AS apprehension_description,
-                repo.apprehension_summary AS apprehension_summary
+                repo.apprehension_summary AS apprehension_summary,
+                repo.created_at AS date_created
             FROM repo_details repo
             INNER JOIN recieve_unit_details received ON repo.id = received.repo_id
             LEFT JOIN customer_profile customer ON repo.customer_acumatica_id = customer.id
@@ -265,33 +268,41 @@ class ReportController extends BaseController
 
         // sold
 
+        // Determine the PDF file and title based on the form type
         switch (strtoupper($formType)) {
             case 'MUISVA':
                 $pdf_file = "muisva";
                 $pdf_title = "Motorcycle Unit Insection and Immediate Sales Value Approval Form";
+                $transactionNumber = $this->generateTransactionNumber(strtolower($formType), $recordId, $stmt[0]->date_created);
             break;
 
             case 'RDAF':
                 $pdf_file = "rdaf";
                 $pdf_title = "ROPA DISPOSAL APPROVAL FORM";
+                $transactionNumber = $this->generateTransactionNumber(strtolower($formType), $recordId, $stmt[0]->date_created);
             break;
 
             case 'SMURF':
                 $pdf_file = "smurf";
                 $pdf_title = "SURRENDERED MOTORCYCLE UNIT REFURBISHMENT FORM";
+                $transactionNumber = '';
             break;
 
             case 'SOLD':
                 $pdf_file = "sold";
                 $pdf_title = "DELIVERY RECEIPT";
+                $transactionNumber = '';
             break;
         }
 
+        // PDF Generation
+        // Load the view and pass the data
 		$pdf = PDF::loadView(
             $pdf_file,
 			array(
 				'Title' =>  $pdf_title,
 				'data' => array(
+					'transactionNumber' => $transactionNumber,
 					'datas' => json_encode($stmt),
 					'parts' => json_encode($parts),
 					'refurbish' => json_encode($refurbish),

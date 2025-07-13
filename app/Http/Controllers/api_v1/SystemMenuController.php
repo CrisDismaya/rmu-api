@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\system_menu;
 use App\Models\menu_mapping;
+use Illuminate\Support\Facades\Log;
 
 class SystemMenuController extends BaseController
 {
@@ -92,6 +93,7 @@ class SystemMenuController extends BaseController
 				'parent_menu' => 'required',
 				'menu_name' => 'required',
 				'menu_file_path' => 'nullable',
+				'menu_status' => 'nullable',
 			]);
 
 			if ($validator->fails()) {
@@ -103,6 +105,7 @@ class SystemMenuController extends BaseController
 				'parent_id' => $request->parent_menu,
 				'menu_name' => $request->menu_name,
 				'file_path' => $request->menu_file_path,
+				'status' => $request->menu_status,
 			];
 
 			system_menu::where('id', $id)->update($format);
@@ -113,35 +116,88 @@ class SystemMenuController extends BaseController
 	}
 
 	public function createMenuMapping(Request $request)
-	{
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'user_role_id' => 'required',
+                'menu_id' => 'required',
+                'map_id' => 'required',
+            ]);
 
-		try {
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
 
-			$validator = Validator::make($request->all(), [
-				'user_role_id' => 'required',
-				'menu_id' => 'required',
-				'map_id' => 'required',
-			]);
+            $userRoleId = $request->user_role_id;
+            $menuId = $request->menu_id;
+            $mapId = $request->map_id;
 
-			if ($validator->fails()) {
-				return $this->sendError('Validation Error.', $validator->errors());
-			}
+            if ($mapId > 0) {
+                // Get the menu being removed
+                $menu = system_menu::find($menuId);
+                if (!$menu) {
+                    return $this->sendError('Error', 'Menu not found.');
+                }
 
-			$format = [
-				'user_role_id' => $request->user_role_id,
-				'menu_id' => $request->menu_id,
-				'created_by' => Auth::user()->id
-			];
+                // Delete the child menu mapping
+                menu_mapping::find($mapId)?->delete();
 
-			if ($request->map_id > 0) {
-				menu_mapping::find($request->map_id)->delete();
-				return $this->sendResponse([], 'Remove Successfully.');
-			} else {
-				menu_mapping::create($format);
-				return $this->sendResponse([], 'Added Successfully.');
-			}
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+                // If it has a parent, check if other children still exist
+                if ($menu->parent_id != 0) {
+                    $remainingChildren = system_menu::where('parent_id', $menu->parent_id)->pluck('id')->toArray();
+
+                    $childMapped = menu_mapping::where('user_role_id', $userRoleId)
+                        ->whereIn('menu_id', $remainingChildren)
+                        ->exists();
+
+                    if (!$childMapped) {
+                        // If no children are mapped, remove the parent mapping
+                        menu_mapping::where('user_role_id', $userRoleId)
+                            ->where('menu_id', $menu->parent_id)
+                            ->delete();
+                    }
+                }
+
+                return $this->sendResponse([], 'Removed successfully.');
+            }
+
+            $menu = system_menu::find($menuId);
+            if (!$menu) {
+                return $this->sendError('Error', 'Menu not found.');
+            }
+
+            // Check and insert parent menu if it's a child
+            if ($menu->parent_id != 0) {
+                $parentMenuId = $menu->parent_id;
+                $parentMapped = menu_mapping::where('user_role_id', $userRoleId)
+                    ->where('menu_id', $parentMenuId)
+                    ->exists();
+
+                if (!$parentMapped) {
+                    menu_mapping::create([
+                        'user_role_id' => $userRoleId,
+                        'menu_id' => $parentMenuId,
+                        'created_by' => Auth::id(),
+                    ]);
+                }
+            }
+
+            // Avoid duplicate mapping
+            $alreadyMapped = menu_mapping::where('user_role_id', $userRoleId)
+                ->where('menu_id', $menuId)
+                ->exists();
+
+            if (!$alreadyMapped) {
+                menu_mapping::create([
+                    'user_role_id' => $userRoleId,
+                    'menu_id' => $menuId,
+                    'created_by' => Auth::id(),
+                ]);
+            }
+
+            return $this->sendResponse([], 'Added successfully.');
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
 }

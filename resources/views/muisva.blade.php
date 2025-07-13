@@ -47,6 +47,8 @@
     </style>
 <body>
     <?php
+        $transactionNumber = $data['transactionNumber'];
+
 		$dataExtract = $data['datas'];
 		$info = json_decode($dataExtract);
 		$owners = ($info[0]->owners != '[]' ? json_decode($info[0]->owners, true) : '');
@@ -55,7 +57,7 @@
 		$decodedParts = json_decode($partsExtract);
 
         function formatToMoney($number) {
-            return number_format($number, 2, '.', ',');
+            return number_format(floatval($number), 2, '.', ',');
         }
 	?>
     {{-- <div id="header"></div> --}}

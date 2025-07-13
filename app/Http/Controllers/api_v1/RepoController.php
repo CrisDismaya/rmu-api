@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\api_v1;
 
-use App\Http\Controllers\Controller;
 use App\Http\Controllers\api_v1\BaseController as BaseController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -13,16 +12,16 @@ use App\Models\repo;
 use App\Models\FilesUploaded;
 use App\Models\receive_unit;
 use App\Models\unit_spare_parts;
-use App\Models\approval_matrix_setting;
 use App\Http\Traits\helper;
-use App\Http\Traits\resuableQuery;
+use App\Http\Traits\ResuableQuery;
 use Illuminate\Support\Carbon;
-use Yajra\Datatables\Datatables;
+use Yajra\DataTables\Facades\DataTables;
+use App\Http\Traits\TransactionNumberGenerator;
 
 class RepoController extends BaseController
 {
 
-	use helper, resuableQuery;
+	use helper, ResuableQuery, TransactionNumberGenerator;
 
 	public function createRepo(Request $request)
 	{
@@ -90,7 +89,9 @@ class RepoController extends BaseController
 				return $this->sendError([], 'Unit already exists');
 			}
 			else {
-				$repo_format = [
+				DB::beginTransaction();
+
+				$repo = repo::create([
 					'branch_id' => Auth::user()->branch,
 					'customer_acumatica_id' => $request->customer_acumatica_id,
 					'brand_id' => $request->brand_id,
@@ -115,15 +116,12 @@ class RepoController extends BaseController
                     'apprehension' => $request->apprehension,
                     'apprehension_description' => $request->apprehension_description,
                     'apprehension_summary' => $request->apprehension_summary,
-				];
-
-				DB::beginTransaction();
-
-				$repo = repo::create($repo_format);
+				]);
 				$latestInsertedId = $repo->id;
 
-				$msuisva = date("Y")."-".str_pad($latestInsertedId, (strlen($latestInsertedId) > 5 ? strlen($latestInsertedId) + 1 : 5), '0', STR_PAD_LEFT);
-				DB::table('repo_details')->where('id', $latestInsertedId)->update(['msuisva_form_no' => $msuisva]);
+				$repo->msuisva_form_no = date("Y")."-".str_pad($latestInsertedId, (strlen($latestInsertedId) > 5 ? strlen($latestInsertedId) + 1 : 5), '0', STR_PAD_LEFT);
+                $repo->transaction_number_inventory_in = $this->generateTransactionNumber('inventory_in', $latestInsertedId, $repo->craeted_at);
+                $repo->save();
 
 				$path = 'image/unit_received/' . strtoupper($request->model_engine . '-' . $request->model_chassis);
 				$directory = public_path($path);
@@ -195,21 +193,19 @@ class RepoController extends BaseController
 		}
 	}
 
-	public function repo()
-	{
-		try {
-
-			$list_of_repos = DB::table('repo_details as rep')
-				->select(
-					'rep.*',
-					'cus.acumatica_id',
-					DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
-					'brd.brandname',
-					'mdl.model_name',
-					'rep.model_engine',
-					'rep.model_chassis',
-					DB::raw(
-						"CASE
+	public function repo(Request $request)
+    {
+        try {
+            $list_of_repos = DB::table('repo_details as rep')
+                ->select(
+                    'rep.*',
+                    'cus.acumatica_id',
+                    DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
+                    DB::raw("branch.name AS branch_name"),
+                    'brd.brandname',
+                    'mdl.model_name',
+                    DB::raw("
+                        CASE
                             WHEN rud.status = 4 THEN 'Repo Tagging Approval'
                             WHEN transfer.status = 0 THEN 'Subject for stock transfer approval'
                             WHEN appraisal.status = 0 THEN 'Subject for Appraisal'
@@ -220,33 +216,30 @@ class RepoController extends BaseController
                             WHEN sld.repo_id IS NOT NULL AND sld.status = 0 THEN 'Subject for selling approval'
                             WHEN sld.repo_id IS NOT NULL AND sld.status = 1 THEN 'Sold'
                             WHEN (rud.status = 0 AND UPPER(rud.is_sold) = 'N') OR appraisal.status = 1 OR (re_refurb.status = 4 AND se_refurb.status = 1) THEN 'Available'
-                        ELSE '' END AS current_status"
-					),
-					DB::raw("CONCAT(ISNULL(files.total_upload_required_files, 0),' / ', (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)) AS total_upload_files"),
-				)
-				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
-				->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
-				->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
-				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
-				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
-				->leftJoin(
-					DB::raw("(
-						SELECT
-                            repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
+                            ELSE ''
+                        END AS current_status
+                    "),
+                    DB::raw("CONCAT(ISNULL(files.total_upload_required_files, 0),' / ', (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)) AS total_upload_files"),
+                )
+                ->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
+                ->leftJoin('branches as branch', 'rep.branch_id', '=', 'branch.id')
+                ->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
+                ->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
+                ->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
+                ->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
+                ->leftJoin(DB::raw("(
+                        SELECT repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
                         FROM repo_details repo
                         LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
                         INNER JOIN (
                             SELECT * FROM files WHERE isRequired = 1 AND status = 1
                         ) files ON upload.files_id = files.id
                         WHERE upload.is_deleted = 0
-                        GROUP BY repo.id, upload.branch_id
-					) files"),
-					"files.repo_id", "=", "rep.id"
-				)
-				->leftJoin(
-					DB::raw("(
-						SELECT
-                            sub.approvalid, sub.recievedid, sta1.status,
+                            GROUP BY repo.id, upload.branch_id
+                    ) files"), 'files.repo_id', '=', 'rep.id'
+                )
+                ->leftJoin(DB::raw("(
+                        SELECT sub.approvalid, sub.recievedid, sta1.status,
                             CASE
                                 WHEN sta1.status = 1 THEN sta1.to_branch
                                 WHEN sta1.status = 2 THEN sta1.from_branch
@@ -261,64 +254,72 @@ class RepoController extends BaseController
                         INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
                         INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
                         INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
-					) transfer"),
-					"rud.id", "=", "transfer.recievedid"
-				)
-				->leftJoin(
-					DB::raw("(
-						SELECT
-                            rec.latest_id, MAX(app.repo_id) AS repo_id , branch, status
+                    ) transfer"), 'rud.id', '=', 'transfer.recievedid'
+                )
+                ->leftJoin(DB::raw("(
+                        SELECT rec.latest_id, MAX(app.repo_id) AS repo_id , branch, status
                         FROM request_approvals app
                         INNER JOIN (
-                            SELECT
-                                MAX(id) AS latest_id, repo_id
+                            SELECT MAX(id) AS latest_id, repo_id
                             FROM request_approvals
                             GROUP BY repo_id
                         ) rec ON app.id = rec.latest_id
                         GROUP BY rec.latest_id, branch, status
-					) appraisal"), function ($join) {
-                        $join->on("rud.id", "=", "appraisal.repo_id")
-                            ->on('rep.branch_id', '=', 'appraisal.branch');
-                    }
-				)
-				->leftJoin(
-					DB::raw("(
-						SELECT
-                            MAX(id) AS latest_id, repo_id, branch, status
+                    ) appraisal"), function ($join) {
+                    $join->on('rud.id', '=', 'appraisal.repo_id')
+                        ->on('rep.branch_id', '=', 'appraisal.branch');
+                })
+                ->leftJoin(DB::raw("(
+                    SELECT MAX(id) AS latest_id, repo_id, branch, status
                         FROM request_refurbishes
                         GROUP BY repo_id, branch, status
-					) re_refurb"), function ($join) {
-                        $join->on("rep.id", "=", "re_refurb.repo_id")
-                            ->on('rep.branch_id', '=', 're_refurb.branch');
+                    ) re_refurb"), function ($join) {
+                    $join->on('rep.id', '=', 're_refurb.repo_id')
+                        ->on('rep.branch_id', '=', 're_refurb.branch');
+                })
+                ->leftJoin('refurbish_processes as se_refurb', 're_refurb.latest_id', '=', 'se_refurb.refurbish_req_id')
+                ->leftJoin('sold_units as sld', function ($join) {
+                    $join->on('rep.id', '=', 'sld.repo_id')
+                        ->on('rep.branch_id', '=', 'sld.branch');
+                })
+                ->where(function ($query) {
+                    $query->whereNull('sld.repo_id')
+                        ->orWhere(DB::raw("sld.status"), '!=', '1');
+                });
+
+            // Role-based filter
+            if (Auth::user()->userrole === 'Warehouse Custodian') {
+                $list_of_repos->where('rep.branch_id', '=', Auth::user()->branch)
+                    ->where(function ($query) {
+                        $query->whereNull('transfer.current_branch')
+                            ->orWhere(DB::raw("CAST(transfer.current_branch AS INT)"), '=', DB::raw("CAST(rep.branch_id AS INT)"));
+                    });
+            }
+
+            // Final output to DataTables with pagination & filtering
+            return DataTables::of($list_of_repos)
+                ->filter(function ($query) use ($request) {
+                    if ($search = $request->get('search')['value']) {
+                        $query->where(function ($q) use ($search) {
+                            $q->orWhere('branch.name', 'like', "%{$search}%")
+                            ->orWhere('cus.acumatica_id', 'like', "%{$search}%")
+                            ->orWhere('rep.transaction_number_inventory_in', 'like', "%{$search}%")
+                            ->orWhere(DB::raw("CONCAT(cus.firstname, ' ', cus.lastname)"), 'like', "%{$search}%")
+                            ->orWhere('mdl.model_name', 'like', "%{$search}%")
+                            ->orWhere('rep.model_engine', 'like', "%{$search}%")
+                            ->orWhere('rep.model_chassis', 'like', "%{$search}%");
+                        });
                     }
-				)
-				->leftJoin('refurbish_processes as se_refurb', 're_refurb.latest_id', '=', 'se_refurb.refurbish_req_id')
-				->leftJoin("sold_units as sld", function ($join) {
-					$join->on("rep.id", "=", "sld.repo_id");
-					$join->on("rep.branch_id", "=", "sld.branch");
-				})
-				->where(function ($query) {
-					$query->whereNull('sld.repo_id')
-						->orWhere(DB::raw("sld.status"), '!=', '1');
-				});
+                })
+                ->order(function ($q) {
+                    $q->orderByDesc('rep.created_at');
+                })
+                ->make(true);
 
-			if (Auth::user()->userrole == 'Warehouse Custodian') {
-				$stmt = $list_of_repos->where('rep.branch_id', '=', Auth::user()->branch)
-					->where(function ($query) {
-						$query->whereNull('transfer.current_branch')
-							->orWhere(DB::raw("CAST(transfer.current_branch AS INT)"), '=', DB::raw("CAST(rep.branch_id AS INT)"));
-					})
-					->get();
-			} else {
-				$stmt = $list_of_repos->get();
-			}
-            $datatables = Datatables::of($stmt);
-
-            return $datatables->make(true);
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+        } catch (\Throwable $th) {
+            return response()->json(['error' => $th->getMessage()], 500);
+        }
+    }
 
 	public function repoDetailsPerId($id, $moduleid)
 	{
@@ -599,7 +600,7 @@ class RepoController extends BaseController
 		}
 	}
 
-	public function fetch_repo_approval($moduleid)
+	public function fetch_repo_approval(Request $request, $moduleid)
 	{
 		try {
             $cteQuery = $this->cteQuery();
@@ -645,11 +646,26 @@ class RepoController extends BaseController
 				->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
 				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
 				->where('rud.status', '=', 4)
-            ->where('rud.approver', Auth::user()->id)->get();
+            ->where('rud.approver', Auth::user()->id);
 
-            $datatables = Datatables::of($stmt);
-
-            return $datatables->make(true);
+            return DataTables::of($stmt)
+                ->filter(function ($query) use ($request) {
+                    if ($search = $request->get('search')['value']) {
+                        $query->where(function ($q) use ($search) {
+                            $q->orWhere('bth.name', 'like', "%{$search}%")
+                            ->orWhere('cus.acumatica_id', 'like', "%{$search}%")
+                            ->orWhere('rep.transaction_number_inventory_in', 'like', "%{$search}%")
+                            ->orWhere(DB::raw("CONCAT(cus.firstname, ' ', cus.lastname)"), 'like', "%{$search}%")
+                            ->orWhere('mdl.model_name', 'like', "%{$search}%")
+                            ->orWhere('rep.model_engine', 'like', "%{$search}%")
+                            ->orWhere('rep.model_chassis', 'like', "%{$search}%");
+                        });
+                    }
+                })
+                ->order(function ($q) {
+                    $q->orderByDesc('rep.created_at');
+                })
+                ->make(true);
 
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
