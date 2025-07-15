@@ -53,31 +53,33 @@ class CustomerProfileController extends BaseController
                 }
             }
 
-            $customer = customer_profiling::create([
-                'firstname' => $request->firstname,
-                'middlename' => $request->middlename,
-                'lastname' => $request->lastname,
-                'contact' => $request->contact,
-                'address' => $request->address,
-                'provinces' => $request->province,
-                'cities' => $request->city,
-                'barangays' => $request->barangay,
-                'zip_code' => $request->zip_code,
-                'nationality' => $request->nationality,
-                'source_of_income' => $request->source_of_income,
-                'marital_status' => $request->marital_status,
-                'date_birth' => $request->date_birth,
-                'birth_place' => $request->birth_place,
-                'primary_id' => $request->primary_id,
-                'primary_id_no' => $request->primary_id_no,
-                'alternative_id' => $request->alternative_id,
-                'alternative_id_no' => $request->alternative_id_no,
-            ]);
+            DB::beginTransaction();
+                $customer = customer_profiling::create([
+                    'firstname' => $request->firstname,
+                    'middlename' => $request->middlename,
+                    'lastname' => $request->lastname,
+                    'contact' => $request->contact,
+                    'address' => $request->address,
+                    'provinces' => $request->province,
+                    'cities' => $request->city,
+                    'barangays' => $request->barangay,
+                    'zip_code' => $request->zip_code,
+                    'nationality' => $request->nationality,
+                    'source_of_income' => $request->source_of_income,
+                    'marital_status' => $request->marital_status,
+                    'date_birth' => $request->date_birth,
+                    'birth_place' => $request->birth_place,
+                    'primary_id' => $request->primary_id,
+                    'primary_id_no' => $request->primary_id_no,
+                    'alternative_id' => $request->alternative_id,
+                    'alternative_id_no' => $request->alternative_id_no,
+                ]);
 
-            $transactionNo = $this->generateTransactionNumber('customer', $customer->id, $customer->created_at);
+                $transactionNo = $this->generateTransactionNumber('customer', null, $customer->created_at);
 
-            $customer->acumatica_id = $transactionNo;
-            $customer->save();
+                $customer->acumatica_id = $transactionNo;
+                $customer->save();
+            DB::commit();
 
             return $this->sendResponse([], 'Customer Profile Successfully Added!');
         } catch (\Throwable $th) {

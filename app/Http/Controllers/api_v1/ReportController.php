@@ -273,13 +273,13 @@ class ReportController extends BaseController
             case 'MUISVA':
                 $pdf_file = "muisva";
                 $pdf_title = "Motorcycle Unit Insection and Immediate Sales Value Approval Form";
-                $transactionNumber = $this->generateTransactionNumber(strtolower($formType), $recordId, $stmt[0]->date_created);
+                $transactionNumber = '';
             break;
 
             case 'RDAF':
                 $pdf_file = "rdaf";
                 $pdf_title = "ROPA DISPOSAL APPROVAL FORM";
-                $transactionNumber = $this->generateTransactionNumber(strtolower($formType), $recordId, $stmt[0]->date_created);
+                $transactionNumber = '';
             break;
 
             case 'SMURF':

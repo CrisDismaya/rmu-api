@@ -166,6 +166,7 @@ class RequestApprovalController extends BaseController
                         (@roleName = 'Warehouse Custodian' AND repo.branch_id = @branchId) OR
                         (@roleName != 'Warehouse Custodian')
                     )
+                ORDER BY repo.created_at DESC
                 ",
                 [ 'roleName' => Auth::user()->userrole, 'branchId' => Auth::user()->branch ]
             );
@@ -289,6 +290,7 @@ class RequestApprovalController extends BaseController
                                 AND req_app.status IN ('0', '2') AND req_app.created_by = @userId
                         )
                     )
+                ORDER BY req_app.created_at DESC
                 ",
                 [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
             );
@@ -1076,6 +1078,10 @@ class RequestApprovalController extends BaseController
             } else {
                 $create = RequestApproval::create($input);
                 $rec_id = $create->id;
+
+                $transactionNo = $this->generateTransactionNumber('rdaf', null, $create->created_at);
+                $create->rdaf_transaction_number = $transactionNo;
+                $create->save();
             }
 
             $matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $rec_id);
@@ -1269,8 +1275,7 @@ class RequestApprovalController extends BaseController
                 $create->save();
                 $rec_id = $create->id;
 
-
-                $transactionNo = $this->generateTransactionNumber('sales', $create->id, $create->created_at);
+                $transactionNo = $this->generateTransactionNumber('sales', null, $create->created_at);
                 $create->transaction_number = $transactionNo;
                 $create->save();
             }
@@ -1321,8 +1326,11 @@ class RequestApprovalController extends BaseController
                     // $boolean = $this->create_customer($request->id);
                     // if ($boolean) {
                         receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
-                        sold_unit::where('id', $request->id)->update(['status' => $request->status]);
-                        $this->generateTransactionNumberInventoryOut('sold_unit', $request->id);
+                        sold_unit::where('id', $request->id)->update([
+                            'status' => $request->status,
+                            'transaction_number_inventory_out' => $this->generateTransactionNumber('inventory_out', null, now()),
+                            'inventory_out_at' => now(),
+                        ]);
                     // }
                 }
                 $sequence = $fetch_sequence;

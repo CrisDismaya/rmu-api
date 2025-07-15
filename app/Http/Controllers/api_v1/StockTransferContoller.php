@@ -198,7 +198,7 @@ class StockTransferContoller extends BaseController
 			$stock = stock_transfer::create($stock_format);
 			$rec_id = $stock->id;
 
-            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $stock->id, $stock->created_at);
+            $transactionNumber = $this->generateTransactionNumber('stock_transfer', null, $stock->created_at);
 
 			stock_transfer::where('id', $rec_id)->update(['reference_code' => $transactionNumber]);
 
@@ -249,7 +249,18 @@ class StockTransferContoller extends BaseController
 				$fetch_sequence = $this->approverDecision($request->module_id, $request->id, Auth::user()->id);
 				if ($fetch_sequence == 0) {
 					stock_transfer::where('id', $request->id)->update(['status' => $request->status]);
-                    $this->generateTransactionNumberInventoryOut('stock_transfer', $request->id);
+
+                    $units  = stock_transfer_units::where('stock_transfer_id', $request->id)->get();
+                    $startCount = $this->forInventoryOutCount();
+                    foreach ($units as $index => $unit) {
+                        $rowNumber = $startCount + $index;
+                        $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, now());
+
+                        $unit->update([
+                            'transaction_number_inventory_out' => $transactionNumber,
+                            'inventory_out_at' => now(),
+                        ]);
+                    }
 				}
 				$sequence = $fetch_sequence;
 			} else if ($request->status == 2) {
@@ -375,7 +386,12 @@ class StockTransferContoller extends BaseController
 
 			DB::beginTransaction();
 
-			stock_transfer_units::where('id', '=', $request->unitid)->update(['is_received' => '1', 'is_use_old_files' => $request->decisionid]);
+			stock_transfer_units::where('id', '=', $request->unitid)->update([
+                'is_received' => '1',
+                'is_use_old_files' => $request->decisionid,
+                'trans_no_received' => $this->generateTransactionNumber('receive_transfer', null, now()),
+                'received_at' => Carbon::now(),
+            ]);
 			repo::where('id', '=', $repo->id)->update(['branch_id' => Auth::user()->branch, 'transfer_branch_id' => $request->unitid]);
 			receive_unit::where('id', '=', $receive->id)->update(['branch' => Auth::user()->branch, 'status' => '0']);
 
@@ -394,8 +410,6 @@ class StockTransferContoller extends BaseController
 				}
 				FilesUploaded::where('id', '=', $pics['id'])->update(['is_deleted' => 1]);
 			}
-
-            // $transactionNumber = $this->generateTransactionNumber('stock_transfer', $stock->id, $stock->created_at);
 
 			DB::commit();
 

@@ -120,7 +120,7 @@ class RepoController extends BaseController
 				$latestInsertedId = $repo->id;
 
 				$repo->msuisva_form_no = date("Y")."-".str_pad($latestInsertedId, (strlen($latestInsertedId) > 5 ? strlen($latestInsertedId) + 1 : 5), '0', STR_PAD_LEFT);
-                $repo->transaction_number_inventory_in = $this->generateTransactionNumber('inventory_in', $latestInsertedId, $repo->craeted_at);
+                $repo->transaction_number_inventory_in = $this->generateTransactionNumber('inventory_in', null, $repo->craeted_at);
                 $repo->save();
 
 				$path = 'image/unit_received/' . strtoupper($request->model_engine . '-' . $request->model_chassis);
