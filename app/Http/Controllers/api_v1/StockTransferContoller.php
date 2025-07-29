@@ -16,13 +16,15 @@ use App\Models\stock_transfer;
 use App\Models\stock_transfer_units;
 use App\Models\approval_matrix_setting;
 use App\Http\Traits\helper;
-use Yajra\Datatables\Datatables;
+use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\Log;
+use App\Http\Traits\TransactionNumberGenerator;
 
 class StockTransferContoller extends BaseController
 {
 	//
 	use helper;
+    use TransactionNumberGenerator;
 
 	public function branchesList()
 	{
@@ -86,6 +88,7 @@ class StockTransferContoller extends BaseController
 					AND (sld.id IS NULL OR sld.status IN (2))
 					AND (ref.id IS NULL OR ref.status IN (2, 3, 4))
 					AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+                    ORDER BY rep.created_at DESC
 				",
 				array(Auth::user()->branch)
 			);
@@ -94,44 +97,50 @@ class StockTransferContoller extends BaseController
 		}
 	}
 
-	public function getAllForApprovals($moduleid)
-	{
-		try {
-			$list = DB::table('stock_transfer_approval as sta')
-				->leftJoin('users as usr', 'sta.created_by', '=', 'usr.id')
-				->select(
-					'sta.id',
-					'sta.reference_code',
-					DB::raw("(SELECT NAME FROM branches WHERE id = sta.from_branch) AS from_branch"),
-					DB::raw("(SELECT NAME FROM branches WHERE id = sta.to_branch) AS to_branch"),
-					'sta.reference_code',
-					'sta.approver AS approver_id',
-					DB::raw("(SELECT CONCAT(firstname,' ',lastname) FROM users WHERE id = sta.approver) AS approver_name"),
-					DB::raw("CONCAT(usr.firstname,' ',usr.lastname) AS created_by"),
-					DB::raw("(SELECT COUNT(recieved_unit_id) FROM stock_transfer_unit WHERE stock_transfer_id = sta.id) AS transfer_units_count"),
-					DB::raw("CASE WHEN sta.remarks IS NULL THEN '' ELSE sta.remarks END AS remarks"),
-					'usr.userrole',
-					'sta.status AS status_id',
-					DB::raw("CASE WHEN sta.status = '0' THEN 'Pending' WHEN sta.status = '1' THEN 'Approved' WHEN sta.status = '2' THEN 'Disapproved' ELSE '' END AS approval_status")
-				);
+	public function getAllForApprovals(Request $request, $moduleid)
+    {
+        try {
+            $query = DB::table('stock_transfer_approval as sta')
+                ->leftJoin('users as usr', 'sta.created_by', '=', 'usr.id')
+                ->select(
+                    'sta.id',
+                    'sta.reference_code',
+                    DB::raw("(SELECT NAME FROM branches WHERE id = sta.from_branch) AS from_branch"),
+                    DB::raw("(SELECT NAME FROM branches WHERE id = sta.to_branch) AS to_branch"),
+                    'sta.approver AS approver_id',
+                    DB::raw("(SELECT CONCAT(firstname,' ',lastname) FROM users WHERE id = sta.approver) AS approver_name"),
+                    DB::raw("CONCAT(usr.firstname,' ',usr.lastname) AS created_by"),
+                    DB::raw("(SELECT COUNT(recieved_unit_id) FROM stock_transfer_unit WHERE stock_transfer_id = sta.id) AS transfer_units_count"),
+                    DB::raw("CASE WHEN sta.remarks IS NULL THEN '' ELSE sta.remarks END AS remarks"),
+                    'usr.userrole',
+                    'sta.status AS status_id',
+                    DB::raw("CASE WHEN sta.status = '0' THEN 'Pending' WHEN sta.status = '1' THEN 'Approved' WHEN sta.status = '2' THEN 'Disapproved' ELSE '' END AS approval_status")
+                );
 
-			if (Auth::user()->userrole == 'Verifier' || Auth::user()->userrole == 'General Manager') {
-				$stmt = $list->where('sta.approver', Auth::user()->id)->orderBy('sta.id', 'desc')->get();
-			}
-            else if (Auth::user()->userrole == 'Warehouse Custodian') {
-				$stmt = $list->where('sta.from_branch', Auth::user()->branch)->orderBy('sta.id', 'desc')->get();
-			}
-            else {
-				$stmt = $list->orderBy('sta.id', 'desc')->get();
-			}
+            if (Auth::user()->userrole == 'Verifier' || Auth::user()->userrole == 'General Manager') {
+                $query->where('sta.approver', Auth::user()->id);
+            } elseif (Auth::user()->userrole == 'Warehouse Custodian') {
+                $query->where('sta.from_branch', Auth::user()->branch);
+            }
 
-            $datatables = Datatables::of($stmt);
-            return $datatables->make(true);
+            return DataTables::of($query)
+                ->filter(function ($query) use ($request) {
+                    if ($search = $request->get('search')['value']) {
+                        $query->where(function ($q) use ($search) {
+                            $q->orWhere('sta.reference_code', 'like', "%{$search}%")
+                            ->orWhere(DB::raw("CONCAT(usr.firstname,' ',usr.lastname)"), 'like', "%{$search}%");
+                        });
+                    }
+                })
+                ->order(function ($q) {
+                    $q->orderByDesc('sta.created_at');
+                })
+                ->make(true);
 
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	function getTransferUnits($id)
 	{
@@ -189,7 +198,9 @@ class StockTransferContoller extends BaseController
 			$stock = stock_transfer::create($stock_format);
 			$rec_id = $stock->id;
 
-			stock_transfer::where('id', $rec_id)->update(['reference_code' => DB::raw("CONCAT('ST', RIGHT('000000' + CAST($rec_id AS VARCHAR), 6))")]);
+            $transactionNumber = $this->generateTransactionNumber('stock_transfer', null, $stock->created_at);
+
+			stock_transfer::where('id', $rec_id)->update(['reference_code' => $transactionNumber]);
 
 			$arr_of_units = json_decode($request->list_of_transfer, true);
 
@@ -238,6 +249,18 @@ class StockTransferContoller extends BaseController
 				$fetch_sequence = $this->approverDecision($request->module_id, $request->id, Auth::user()->id);
 				if ($fetch_sequence == 0) {
 					stock_transfer::where('id', $request->id)->update(['status' => $request->status]);
+
+                    $units  = stock_transfer_units::where('stock_transfer_id', $request->id)->get();
+                    $startCount = $this->forInventoryOutCount();
+                    foreach ($units as $index => $unit) {
+                        $rowNumber = $startCount + $index;
+                        $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, now());
+
+                        $unit->update([
+                            'transaction_number_inventory_out' => $transactionNumber,
+                            'inventory_out_at' => now(),
+                        ]);
+                    }
 				}
 				$sequence = $fetch_sequence;
 			} else if ($request->status == 2) {
@@ -268,36 +291,62 @@ class StockTransferContoller extends BaseController
 		}
 	}
 
-	function getAllReceiveStockTransfer()
-	{
-		try {
-			$stmt = DB::select(
-				"SELECT
-					sta.reference_code, brh.name AS branch_name, CONCAT(cus.firstname,' ',cus.lastname) AS customer_name,
-					brd.brandname, mdl.model_name, UPPER(rep.model_engine) AS engine, UPPER(rep.model_chassis) AS chassis,
-					CASE WHEN stu.is_received = 0 AND stu.is_use_old_files = 0 THEN 'NO DECISION' ELSE 'WITH DECISION' END  AS received_status,
-					rep.id as repo_id, sta.id AS stock_approval_id, stu.id AS stock_unit_id,
-					CASE WHEN stu.is_received = 0 AND stu.is_use_old_files = 0 THEN 'NO DECISION' ELSE 'WITH DECISION' END  AS received_status,
-					stu.is_received, stu.is_use_old_files
-				FROM stock_transfer_approval sta
-				INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
-				INNER JOIN recieve_unit_details rud ON stu.recieved_unit_id = rud.id
-				INNER JOIN repo_details rep ON rud.repo_id = rep.id
-				LEFT JOIN customer_profile cus ON rep.customer_acumatica_id = cus.id
-				LEFT JOIN branches brh ON sta.from_branch = brh.id
-				LEFT JOIN brands brd ON rep.brand_id = brd.id
-				LEFT JOIN unit_models mdl ON rep.model_id = mdl.id
-				WHERE sta.status = 1 AND stu.is_received = 0 AND sta.to_branch = ?",
-				array(Auth::user()->branch)
-			);
-			
-			$datatables = Datatables::of($stmt);
-            return $datatables->make(true);
-			
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+	public function getAllReceiveStockTransfer(Request $request)
+    {
+        try {
+            $query = DB::table('stock_transfer_approval as sta')
+                ->join('stock_transfer_unit as stu', 'sta.id', '=', 'stu.stock_transfer_id')
+                ->join('recieve_unit_details as rud', 'stu.recieved_unit_id', '=', 'rud.id')
+                ->join('repo_details as rep', 'rud.repo_id', '=', 'rep.id')
+                ->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
+                ->leftJoin('branches as brh', 'sta.from_branch', '=', 'brh.id')
+                ->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
+                ->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
+                ->select([
+                    DB::raw("REPLACE(sta.reference_code, 'ST', 'RT') AS reference_code"),
+                    'brh.name as branch_name',
+                    DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
+                    'brd.brandname',
+                    'mdl.model_name',
+                    DB::raw("UPPER(rep.model_engine) AS engine"),
+                    DB::raw("UPPER(rep.model_chassis) AS chassis"),
+                    'rep.id as repo_id',
+                    'sta.id as stock_approval_id',
+                    'stu.id as stock_unit_id',
+                    'stu.is_received',
+                    'stu.is_use_old_files',
+                    DB::raw("
+                        CASE
+                            WHEN stu.is_received = 0 AND stu.is_use_old_files = 0 THEN 'NO DECISION'
+                            ELSE 'WITH DECISION'
+                        END AS received_status
+                    "),
+                ])
+                ->where('sta.status', 1)
+                ->where('stu.is_received', 0)
+                ->where('sta.to_branch', Auth::user()->branch);
+
+            return DataTables::of($query)
+                ->filter(function ($query) use ($request) {
+                    if ($search = $request->get('search')['value']) {
+                        $query->where(function ($q) use ($search) {
+                            $q->orWhere('sta.reference_code', 'like', "%{$search}%")
+                            ->orWhere(DB::raw("CONCAT(cus.firstname,' ',cus.lastname)"), 'like', "%{$search}%")
+                            ->orWhere('rep.model_engine', 'like', "%{$search}%")
+                            ->orWhere('rep.model_chassis', 'like', "%{$search}%")
+                            ;
+                        });
+                    }
+                })
+                ->order(function ($q) {
+                    $q->orderByDesc('sta.created_at');
+                })
+                ->make(true);
+
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	function getAllFileUploaded(Request $request)
 	{
@@ -337,7 +386,12 @@ class StockTransferContoller extends BaseController
 
 			DB::beginTransaction();
 
-			stock_transfer_units::where('id', '=', $request->unitid)->update(['is_received' => '1', 'is_use_old_files' => $request->decisionid]);
+			stock_transfer_units::where('id', '=', $request->unitid)->update([
+                'is_received' => '1',
+                'is_use_old_files' => $request->decisionid,
+                'trans_no_received' => $this->generateTransactionNumber('receive_transfer', null, now()),
+                'received_at' => Carbon::now(),
+            ]);
 			repo::where('id', '=', $repo->id)->update(['branch_id' => Auth::user()->branch, 'transfer_branch_id' => $request->unitid]);
 			receive_unit::where('id', '=', $receive->id)->update(['branch' => Auth::user()->branch, 'status' => '0']);
 

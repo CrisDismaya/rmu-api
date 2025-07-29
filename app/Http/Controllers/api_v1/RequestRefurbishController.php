@@ -12,14 +12,14 @@ use App\Models\refurbish_detail;
 use App\Models\refurbishProcess;
 use Illuminate\Http\Request;
 use App\Http\Traits\helper;
-use App\Http\Traits\resuableQuery;
+use App\Http\Traits\ResuableQuery;
 use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
 
 class RequestRefurbishController extends BaseController
 {
 	//
-	use helper, resuableQuery;
+	use helper, ResuableQuery;
 
 	public function listOfForRefurbish()
 	{

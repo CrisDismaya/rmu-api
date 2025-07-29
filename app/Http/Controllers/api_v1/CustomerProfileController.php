@@ -7,11 +7,14 @@ use Illuminate\Http\Request;
 use App\Models\customer_profiling;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
-use Yajra\Datatables\Datatables;
+use Yajra\DataTables\Facades\DataTables;
+use App\Http\Traits\TransactionNumberGenerator;
+use Illuminate\Support\Facades\Log;
 
 class CustomerProfileController extends BaseController
 {
     //
+    use TransactionNumberGenerator;
 
     function createCustomerProfile(Request $request)
     {
@@ -50,29 +53,34 @@ class CustomerProfileController extends BaseController
                 }
             }
 
-            $format = [
-                'acumatica_id' => $request->acumatica_id,
-                'firstname' => $request->firstname,
-                'middlename' => $request->middlename,
-                'lastname' => $request->lastname,
-                'contact' => $request->contact,
-                'address' => $request->address,
-                'provinces' => $request->province,
-                'cities' => $request->city,
-                'barangays' => $request->barangay,
-                'zip_code' => $request->zip_code,
-                'nationality' => $request->nationality,
-                'source_of_income' => $request->source_of_income,
-                'marital_status' => $request->marital_status,
-                'date_birth' => $request->date_birth,
-                'birth_place' => $request->birth_place,
-                'primary_id' => $request->primary_id,
-                'primary_id_no' => $request->primary_id_no,
-                'alternative_id' => $request->alternative_id,
-                'alternative_id_no' => $request->alternative_id_no,
-            ];
+            DB::beginTransaction();
+                $customer = customer_profiling::create([
+                    'firstname' => $request->firstname,
+                    'middlename' => $request->middlename,
+                    'lastname' => $request->lastname,
+                    'contact' => $request->contact,
+                    'address' => $request->address,
+                    'provinces' => $request->province,
+                    'cities' => $request->city,
+                    'barangays' => $request->barangay,
+                    'zip_code' => $request->zip_code,
+                    'nationality' => $request->nationality,
+                    'source_of_income' => $request->source_of_income,
+                    'marital_status' => $request->marital_status,
+                    'date_birth' => $request->date_birth,
+                    'birth_place' => $request->birth_place,
+                    'primary_id' => $request->primary_id,
+                    'primary_id_no' => $request->primary_id_no,
+                    'alternative_id' => $request->alternative_id,
+                    'alternative_id_no' => $request->alternative_id_no,
+                ]);
 
-            customer_profiling::create($format);
+                $transactionNo = $this->generateTransactionNumber('customer', null, $customer->created_at);
+
+                $customer->acumatica_id = $transactionNo;
+                $customer->save();
+            DB::commit();
+
             return $this->sendResponse([], 'Customer Profile Successfully Added!');
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
@@ -87,19 +95,30 @@ class CustomerProfileController extends BaseController
         return $customers;
     }
 
-    function customerProfile()
+    function customerProfile(Request $request)
     {
         try {
-            $stmt = DB::select("SELECT TOP 10000 *,  UPPER(
-                    CONCAT(firstname,
-                        CASE
-                            WHEN middlename != '' THEN CONCAT(' ', middlename, ' ')
-                        ELSE ' ' END, lastname
-                    )
-                ) AS customer_name FROM customer_profile");
-            $datatables = Datatables::of($stmt);
+            $stmt = DB::table('customer_profile')
+                ->select(
+                    '*',
+                    DB::raw("UPPER(CONCAT(firstname,
+                        CASE WHEN middlename != '' THEN CONCAT(' ', middlename, ' ') ELSE ' ' END,
+                        lastname)) AS customer_name")
+                );
 
-            return $datatables->make(true);
+            return DataTables::of($stmt)
+                ->filter(function ($query) use ($request) {
+                    if ($search = $request->get('search')['value']) {
+                        $query->where(function ($q) use ($search) {
+                            $q->orWhere('acumatica_id', 'like', "%{$search}%")
+                            ->orWhere(DB::raw("CONCAT(firstname, ' ', lastname)"), 'like', "%{$search}%");
+                        });
+                    }
+                })
+                ->order(function ($q) {
+                    $q->orderByDesc('created_at');
+                })
+                ->make(true);
 
 
         } catch (\Throwable $th) {
@@ -136,8 +155,8 @@ class CustomerProfileController extends BaseController
                 return $this->sendError('Validation Error.', $validator->errors());
             }
 
-            $format = [
-                'acumatica_id' => $request->acumatica_id,
+            customer_profiling::where('id', $id)
+            ->update([
                 'firstname' => $request->firstname,
                 'middlename' => $request->middlename,
                 'lastname' => $request->lastname,
@@ -156,9 +175,7 @@ class CustomerProfileController extends BaseController
                 'primary_id_no' =>  $request->primary_id_no,
                 'alternative_id' =>  $request->alternative_id,
                 'alternative_id_no' =>  $request->alternative_id_no,
-            ];
-
-            customer_profiling::where('id', $id)->update($format);
+            ]);
             return $this->sendResponse([], 'Model updated successfully.');
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);

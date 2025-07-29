@@ -12,14 +12,14 @@ use App\Models\User;
 use App\Models\approval_matrix_setting;
 use App\Models\user_role;
 use App\Models\system_menu;
-use App\Http\Traits\resuableQuery;
+use App\Http\Traits\ResuableQuery;
 
 
 
 class UserController extends BaseController
 {
 	//
-    use resuableQuery; //helper traits
+    use ResuableQuery; //helper traits
 
 	public function getRoles()
 	{
@@ -53,18 +53,20 @@ class UserController extends BaseController
 	{
 		try {
 			$validator = Validator::make($request->all(), [
+				'branch' => 'required',
 				'employee_no' => 'required',
 				'firstname' => 'required',
 				'lastname' => 'required',
 				'email' => 'required|email|unique:users',
 				'userrole' => 'required',
-				'branch' => 'required',
 				'password' => 'required',
 			]);
 
 			if ($validator->fails()) {
 				return $this->sendError('Validation Error.', $validator->errors());
 			}
+
+            DB::beginTransaction();
 
 			$checker = User::where('employee_no', $request->employee_no)->count();
 
@@ -81,6 +83,8 @@ class UserController extends BaseController
 			//$success['default_password'] =  $random_password;
 
 			return $this->sendResponse([], 'User register successfully.');
+
+            DB::commit();
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}

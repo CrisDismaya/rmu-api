@@ -4,7 +4,7 @@ namespace App\Http\Traits;
 
 use Illuminate\Support\Facades\DB;
 
-trait resuableQuery {
+trait ResuableQuery {
 
     public function cteQuery(){
 
@@ -99,5 +99,10 @@ trait resuableQuery {
                 'repo.id as repo_id',
                 DB::raw('ROUND((total_parts.total_parts_price / repo.original_srp) * 100.0, 2) AS class_percent')
             );
+    }
+
+    public function forRepoStatus()
+    {
+        return 0;
     }
 }

@@ -96,32 +96,32 @@ class PartsController extends BaseController
         }
     }
 
-    public function partsPerModel()
+    public function partsPerModel(Request $request)
     {
         try {
-            // Retrieve data from the cache
-            $cachedData = Cache::get('parts_per_model');
+            $query = DB::table('spare_parts')
+                ->selectRaw("id as id, TRIM(name) as text")
+                ->where('status', '=', 'A')
+                ->where('name', '!=', '');
 
-            // Check if cache exists and the count matches the current database count
-            if ($cachedData && count($cachedData) === DB::table('spare_parts')->where('status', '=', 'A')->where('name', '!=', '')->count()) {
-                return $cachedData;
+            // Apply search filter if present
+            if ($request->has('search') && $request->search != '') {
+                $query->where('name', 'LIKE', '%' . $request->search . '%');
             }
 
-            // If cache is empty or counts don't match, update the cache
-            $newData = DB::table('spare_parts')
-                ->selectRaw("
-                    id as value,
-                    TRIM(name) as label
-                ")
-                ->where('status', '=', 'A')
-                ->where('name', '!=', '')
-                ->orderBy('name', 'ASC')
-                ->get();
+            // Set pagination variables
+            $page = $request->get('page', 1);
+            $perPage = 30;
 
-            // Cache the new data for 14400 minutes
-            Cache::put('parts_per_model', $newData, 14400);
+            $items = $query->orderBy('name', 'ASC')
+                        ->skip(($page - 1) * $perPage)
+                        ->take($perPage)
+                        ->get();
 
-            return $newData;
+            return response()->json([
+                'items' => $items,
+                'more' => $items->count() >= $perPage // indicates if more data is available
+            ]);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }

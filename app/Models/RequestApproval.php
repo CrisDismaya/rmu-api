@@ -23,6 +23,7 @@ class RequestApproval extends Model
         'date_approved',
         'status',
         'remarks',
+        'rdaf_transaction_number',
         'created_by'
     ];
 }
