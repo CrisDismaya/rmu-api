@@ -17,6 +17,7 @@ use App\Http\Traits\ResuableQuery;
 use Illuminate\Support\Carbon;
 use Yajra\DataTables\Facades\DataTables;
 use App\Http\Traits\TransactionNumberGenerator;
+use Illuminate\Support\Facades\Log;
 
 class RepoController extends BaseController
 {
@@ -196,126 +197,177 @@ class RepoController extends BaseController
 	public function repo(Request $request)
     {
         try {
-            $list_of_repos = DB::table('repo_details as rep')
-                ->select(
-                    'rep.*',
-                    'cus.acumatica_id',
-                    DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
-                    DB::raw("branch.name AS branch_name"),
-                    'brd.brandname',
-                    'mdl.model_name',
-                    DB::raw("
+
+            $roleName = Auth::user()->userrole;
+            $branchId = Auth::user()->branch;
+
+            $cteQuery = $this->cteQuery();
+
+            $sql = "
+                DECLARE @roleName Nvarchar(100) = :roleName, @branchId Int = :branchId;
+                {$cteQuery}
+
+                SELECT
+                    rep.*,
+                    cus.acumatica_id,
+                    CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name,
+                    branch.name AS branch_name,
+                    brd.brandname,
+                    mdl.model_name,
+                    CASE
+                        WHEN rud.status IN (1, 4) THEN 'Pending Repo Tagging Approval'
+                        WHEN transfer.status = 0 THEN 'Pending Stock Transfer Approval'
+                        WHEN appraisal.status = 0 THEN 'Pending Appraisal Approval'
+                        WHEN re_refurb.status = 0 THEN 'Pending Refurbishment Approval'
+                        WHEN re_refurb.status = 1 THEN 'Refurbishment In Progress'
+                        WHEN re_refurb.status = 3 AND se_refurb.status IS NULL THEN 'Pending Settle Refurbishment'
+                        WHEN re_refurb.status = 3 AND se_refurb.status = 0 THEN 'Settle Refurbishment In Progress'
+                        WHEN sld.repo_id IS NOT NULL AND sld.status = 0 THEN 'Pending Selling Approval'
+                        WHEN sld.repo_id IS NOT NULL AND sld.status = 1 THEN 'Sold'
+                        WHEN (rud.status = 0 AND UPPER(rud.is_sold) = 'N')
+                            OR appraisal.status = 1
+                            OR (re_refurb.status = 4 AND se_refurb.status = 1) THEN 'Available'
+                        ELSE ''
+                    END AS current_status,
+                    CONCAT(ISNULL(files.total_upload_required_files, 0), ' / ',
+                        (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)) AS total_upload_files,
+                    rud.loan_amount,
+                    rud.principal_balance,
+                    rud.total_payments,
+                    ISNULL(missing_and_damaged_items.total_amount_of_missing_and_damages, 0) AS total_amount_of_missing_and_damages,
+                    repoCompute.total_depreciation_cost,
+                    repoCompute.settled_total_cost,
+
+                    (
+                        rep.original_srp -
+                        (ISNULL(missing_and_damaged_items.total_amount_of_missing_and_damages, 0) + repoCompute.total_depreciation_cost) +
                         CASE
-                            WHEN rud.status = 4 THEN 'Repo Tagging Approval'
-                            WHEN transfer.status = 0 THEN 'Subject for stock transfer approval'
-                            WHEN appraisal.status = 0 THEN 'Subject for Appraisal'
-                            WHEN re_refurb.status = 0 THEN 'Subject for refurbish approval'
-                            WHEN re_refurb.status = 1 THEN 'On process for refurbish'
-                            WHEN re_refurb.status = 3 AND se_refurb.status IS NULL THEN 'Subject for settle refurbish'
-                            WHEN re_refurb.status = 3 AND se_refurb.status = 0 THEN 'On process for settle refurbish'
-                            WHEN sld.repo_id IS NOT NULL AND sld.status = 0 THEN 'Subject for selling approval'
-                            WHEN sld.repo_id IS NOT NULL AND sld.status = 1 THEN 'Sold'
-                            WHEN (rud.status = 0 AND UPPER(rud.is_sold) = 'N') OR appraisal.status = 1 OR (re_refurb.status = 4 AND se_refurb.status = 1) THEN 'Available'
-                            ELSE ''
-                        END AS current_status
-                    "),
-                    DB::raw("CONCAT(ISNULL(files.total_upload_required_files, 0),' / ', (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)) AS total_upload_files"),
-                )
-                ->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
-                ->leftJoin('branches as branch', 'rep.branch_id', '=', 'branch.id')
-                ->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
-                ->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
-                ->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
-                ->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
-                ->leftJoin(DB::raw("(
-                        SELECT repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
-                        FROM repo_details repo
-                        LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
-                        INNER JOIN (
-                            SELECT * FROM files WHERE isRequired = 1 AND status = 1
-                        ) files ON upload.files_id = files.id
-                        WHERE upload.is_deleted = 0
-                            GROUP BY repo.id, upload.branch_id
-                    ) files"), 'files.repo_id', '=', 'rep.id'
-                )
-                ->leftJoin(DB::raw("(
-                        SELECT sub.approvalid, sub.recievedid, sta1.status,
-                            CASE
-                                WHEN sta1.status = 1 THEN sta1.to_branch
-                                WHEN sta1.status = 2 THEN sta1.from_branch
-                            END AS current_branch,
-                            stu1.is_received AS isreceived, stu1.is_use_old_files, rud1.repo_id as repoid, sub.unitid
-                        FROM (
-                            SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
-                            FROM stock_transfer_approval sta
-                            INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
-                            GROUP BY stu.recieved_unit_id
-                        ) sub
-                        INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
-                        INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
-                        INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
-                    ) transfer"), 'rud.id', '=', 'transfer.recievedid'
-                )
-                ->leftJoin(DB::raw("(
-                        SELECT rec.latest_id, MAX(app.repo_id) AS repo_id , branch, status
-                        FROM request_approvals app
-                        INNER JOIN (
-                            SELECT MAX(id) AS latest_id, repo_id
-                            FROM request_approvals
-                            GROUP BY repo_id
-                        ) rec ON app.id = rec.latest_id
-                        GROUP BY rec.latest_id, branch, status
-                    ) appraisal"), function ($join) {
-                    $join->on('rud.id', '=', 'appraisal.repo_id')
-                        ->on('rep.branch_id', '=', 'appraisal.branch');
-                })
-                ->leftJoin(DB::raw("(
+                            WHEN appraisal.repo_id IS NOT NULL THEN repoCompute.settled_total_cost
+                            ELSE 0
+                        END
+                    ) AS smv_pricing
+
+                FROM repo_details rep
+                INNER JOIN recieve_unit_details rud ON rep.id = rud.repo_id
+                LEFT JOIN branches branch ON rep.branch_id = branch.id
+                LEFT JOIN customer_profile cus ON rep.customer_acumatica_id = cus.id
+                LEFT JOIN brands brd ON rep.brand_id = brd.id
+                LEFT JOIN unit_models mdl ON rep.model_id = mdl.id
+                LEFT JOIN users usr ON usr.id = rud.approver
+
+                LEFT JOIN (
+                    SELECT
+                        repo.id AS repo_id,
+                        CASE
+                            WHEN DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), GETDATE()) BETWEEN 1 AND 6 THEN repo.original_srp * 0.05
+                            WHEN DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), GETDATE()) BETWEEN 7 AND 12 THEN repo.original_srp * 0.10
+                            WHEN DATEDIFF(MONTH, CONVERT(DATE, repo.date_sold), GETDATE()) BETWEEN 13 AND 24 THEN repo.original_srp * 0.15
+                            ELSE repo.original_srp * 0.20
+                        END AS total_depreciation_cost,
+
+                        ISNULL((
+                            SELECT
+                                SUM(settled_total_cost) AS settled_total_cost
+                            FROM transactions
+                            WHERE repo_id = repo.id AND row_num > (
+                                SELECT row_num
+                                FROM transactions
+                                WHERE repo_id = repo.id AND source_process = 'appraisal'
+                            )
+                        ), 0) AS settled_total_cost
+                    FROM repo_details repo
+                ) AS repoCompute ON repoCompute.repo_id = rep.id
+
+                LEFT JOIN (
+                    SELECT repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
+                    FROM repo_details repo
+                    LEFT JOIN files_uploaded upload
+                        ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
+                    INNER JOIN (
+                        SELECT * FROM files WHERE isRequired = 1 AND status = 1
+                    ) files ON upload.files_id = files.id
+                    WHERE upload.is_deleted = 0
+                    GROUP BY repo.id, upload.branch_id
+                ) files ON files.repo_id = rep.id
+
+                LEFT JOIN (
+                    SELECT sub.approvalid, sub.recievedid, sta1.status,
+                        CASE
+                            WHEN sta1.status = 1 THEN sta1.to_branch
+                            WHEN sta1.status = 2 THEN sta1.from_branch
+                        END AS current_branch,
+                        stu1.is_received AS isreceived, stu1.is_use_old_files,
+                        rud1.repo_id AS repoid, sub.unitid
+                    FROM (
+                        SELECT MAX(sta.id) AS approvalid,
+                            MAX(stu.recieved_unit_id) AS recievedid,
+                            MAX(stu.id) AS unitid
+                        FROM stock_transfer_approval sta
+                        INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
+                        GROUP BY stu.recieved_unit_id
+                    ) sub
+                    INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
+                    INNER JOIN stock_transfer_unit stu1
+                        ON sub.unitid = stu1.id
+                    AND sub.approvalid = stu1.stock_transfer_id
+                    AND sub.recievedid = stu1.recieved_unit_id
+                    INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
+                ) transfer ON rud.id = transfer.recievedid
+
+                LEFT JOIN (
+                    SELECT rec.latest_id, MAX(app.repo_id) AS repo_id, app.branch, app.status
+                    FROM request_approvals app
+                    INNER JOIN (
+                        SELECT MAX(id) AS latest_id, repo_id
+                        FROM request_approvals
+                        GROUP BY repo_id
+                    ) rec ON app.id = rec.latest_id
+                    INNER JOIN request_approvals request ON rec.latest_id = request.id
+                    GROUP BY rec.latest_id, app.branch, app.status
+                ) appraisal ON rud.id = appraisal.repo_id AND rep.branch_id = appraisal.branch
+
+                LEFT JOIN (
                     SELECT MAX(id) AS latest_id, repo_id, branch, status
-                        FROM request_refurbishes
-                        GROUP BY repo_id, branch, status
-                    ) re_refurb"), function ($join) {
-                    $join->on('rep.id', '=', 're_refurb.repo_id')
-                        ->on('rep.branch_id', '=', 're_refurb.branch');
-                })
-                ->leftJoin('refurbish_processes as se_refurb', 're_refurb.latest_id', '=', 'se_refurb.refurbish_req_id')
-                ->leftJoin('sold_units as sld', function ($join) {
-                    $join->on('rep.id', '=', 'sld.repo_id')
-                        ->on('rep.branch_id', '=', 'sld.branch');
-                })
-                ->where(function ($query) {
-                    $query->whereNull('sld.repo_id')
-                        ->orWhere(DB::raw("sld.status"), '!=', '1');
-                });
+                    FROM request_refurbishes
+                    GROUP BY repo_id, branch, status
+                ) re_refurb ON rep.id = re_refurb.repo_id AND rep.branch_id = re_refurb.branch
 
-            // Role-based filter
-            if (Auth::user()->userrole === 'Warehouse Custodian') {
-                $list_of_repos->where('rep.branch_id', '=', Auth::user()->branch)
-                    ->where(function ($query) {
-                        $query->whereNull('transfer.current_branch')
-                            ->orWhere(DB::raw("CAST(transfer.current_branch AS INT)"), '=', DB::raw("CAST(rep.branch_id AS INT)"));
-                    });
-            }
+                LEFT JOIN refurbish_processes se_refurb
+                    ON re_refurb.latest_id = se_refurb.refurbish_req_id
 
-            // Final output to DataTables with pagination & filtering
-            return DataTables::of($list_of_repos)
-                ->filter(function ($query) use ($request) {
-                    if ($search = $request->get('search')['value']) {
-                        $query->where(function ($q) use ($search) {
-                            $q->orWhere('branch.name', 'like', "%{$search}%")
-                            ->orWhere('cus.acumatica_id', 'like', "%{$search}%")
-                            ->orWhere('rep.transaction_number_inventory_in', 'like', "%{$search}%")
-                            ->orWhere(DB::raw("CONCAT(cus.firstname, ' ', cus.lastname)"), 'like', "%{$search}%")
-                            ->orWhere('mdl.model_name', 'like', "%{$search}%")
-                            ->orWhere('rep.model_engine', 'like', "%{$search}%")
-                            ->orWhere('rep.model_chassis', 'like', "%{$search}%");
-                        });
-                    }
-                })
-                ->order(function ($q) {
-                    $q->orderByDesc('rep.created_at');
-                })
-                ->make(true);
+                LEFT JOIN sold_units sld
+                    ON rep.id = sld.repo_id AND rep.branch_id = sld.branch
 
+                LEFT JOIN (
+                    SELECT recieve_id AS received_id, SUM(price) AS total_amount_of_missing_and_damages
+                    FROM recieve_unit_spare_parts
+                    WHERE is_deleted = 0
+                    GROUP BY recieve_id
+                ) missing_and_damaged_items ON rud.id = missing_and_damaged_items.received_id
+
+                WHERE (sld.repo_id IS NULL OR sld.status != 1)
+                AND (
+                    @roleName = 'Warehouse Custodian' AND rep.branch_id = @branchId
+                        AND (transfer.current_branch IS NULL OR CAST(transfer.current_branch AS INT) = CAST(rep.branch_id AS INT)) OR
+                    @roleName != 'Warehouse Custodian'
+                )
+                ORDER BY rep.created_at DESC
+            ";
+
+            // for debugging purposes
+            // $interpolatedSql = str_replace(
+            //     [':roleName', ':branchId'],
+            //     ["'" . addslashes($roleName) . "'", (int) $branchId],
+            //     $sql
+            // );
+            // Log::info('Final SQL Query with Bindings:', ['query' => $interpolatedSql]);
+
+            $repos = DB::select($sql, [
+                'roleName' => $roleName,
+                'branchId' => $branchId,
+            ]);
+
+            return DataTables::of($repos)->make(true);
         } catch (\Throwable $th) {
             return response()->json(['error' => $th->getMessage()], 500);
         }

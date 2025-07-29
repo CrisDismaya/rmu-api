@@ -18,6 +18,7 @@ use App\Http\Controllers\api_v1\DashboardController;
 use App\Http\Controllers\api_v1\UserRoleController;
 use App\Http\Controllers\api_v1\SystemMenuController;
 use App\Http\Controllers\api_v1\AccessFileController;
+use App\Http\Controllers\api_v1\PhysicalInventoryDocController;
 use App\Http\Controllers\api_v1\ReportController;
 use App\Http\Controllers\api_v1\RequestRefurbishController;
 
@@ -205,5 +206,13 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('files', [AccessFileController::class, 'files']);
 			Route::post('createFileUpload', [AccessFileController::class, 'createFileUpload']);
 			Route::post('updateFileUpload/{id}', [AccessFileController::class, 'updateFileUpload']);
+
+            // physical inventory documents
+            Route::post('createPhysicalInventoryDoc', [PhysicalInventoryDocController::class, 'createPhysicalInventoryDoc']);
+            Route::get('getPhysicalInventoryDocs', [PhysicalInventoryDocController::class, 'getPhysicalInventoryDocs']);
+            Route::get('getPhysicalInventoryFiles', [PhysicalInventoryDocController::class, 'getPhysicalInventoryFiles']);
+            Route::post('downloadPhysicalInventory', [PhysicalInventoryDocController::class, 'downloadPhysicalInventory']);
+            Route::post('submitApproverDecision', [PhysicalInventoryDocController::class, 'submitApproverDecision']);
+
 	});
 });
