@@ -17,7 +17,7 @@ class CreateApprovalMatrixSettingsTable extends Migration
             $table->id();
             $table->bigInteger('module_id');
             $table->integer('level');
-            $table->json('signatories');
+            $table->json('signatories'); // user role based but the array is user
             $table->timestamps();
         });
     }

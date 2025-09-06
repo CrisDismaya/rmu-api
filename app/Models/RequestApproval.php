@@ -9,6 +9,8 @@ class RequestApproval extends Model
 {
     use HasFactory;
 
+    protected $table = 'request_approvals';
+
     protected $fillable = [
         'received_unit_id',
         'repo_id',
@@ -24,6 +26,6 @@ class RequestApproval extends Model
         'status',
         'remarks',
         'rdaf_transaction_number',
-        'created_by'
+        'created_by',
     ];
 }

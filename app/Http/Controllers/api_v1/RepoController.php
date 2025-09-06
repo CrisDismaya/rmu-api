@@ -215,7 +215,7 @@ class RepoController extends BaseController
                     brd.brandname,
                     mdl.model_name,
                     CASE
-                        WHEN rud.status IN (1, 4) THEN 'Pending Repo Tagging Approval'
+                        WHEN rud.status IN (4) THEN 'Pending Repo Tagging Approval'
                         WHEN transfer.status = 0 THEN 'Pending Stock Transfer Approval'
                         WHEN appraisal.status = 0 THEN 'Pending Appraisal Approval'
                         WHEN re_refurb.status = 0 THEN 'Pending Refurbishment Approval'
@@ -688,7 +688,8 @@ class RepoController extends BaseController
 						WHEN rud.status = '2' THEN 'Disapproved'
 						ELSE ''
 					END AS current_status"),
-					DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
+					// DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
+					DB::raw("UPPER(role.user_role_name) AS approver_name"),
 					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
 				)
 				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
@@ -696,9 +697,9 @@ class RepoController extends BaseController
 				->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
 				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
 				->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
-				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
-				->where('rud.status', '=', 4)
-            ->where('rud.approver', Auth::user()->id);
+				->leftJoin('user_role as role', 'role.id', '=', 'rud.approver')
+                // ->where('role.user_role_name', Auth::user()->userrole)
+				->where('rud.status', '=', 4);
 
             return DataTables::of($stmt)
                 ->filter(function ($query) use ($request) {
@@ -728,8 +729,11 @@ class RepoController extends BaseController
 	{
 
 		$repo = DB::table('repo_details')->where('id', '=', $request->recordid)->first();
+        Log::error('repo_details', ['repo_details' => $repo]);
 		$maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $repo->id)->where('branch', '=', $repo->branch_id)->max('id');
+        Log::error('repo_details 1', ['recieve_unit_details' => $maxid]);
 		$received = DB::table('recieve_unit_details')->where('id', '=', $maxid)->first();
+        Log::error('repo_details 2', ['recieve_unit_details' => $received]);
 
 		try {
 			$validator = Validator::make($request->all(), [
@@ -747,6 +751,7 @@ class RepoController extends BaseController
 
 			// Get the next approver in approval matrix
 			$sequence = $this->approverDecision($request->moduleid, $received->id, Auth::user()->id);
+            Log::error('$sequence', ['sequence' => $sequence]);
 
 			DB::beginTransaction();
 
@@ -756,7 +761,6 @@ class RepoController extends BaseController
 					'total_payments' => $request->totalPayment,
 					'principal_balance' => $request->principalBalance,
 					'status' => $request->status,
-					'approver' => $sequence == 0 ? Auth::user()->id : $sequence,
 					'date_approved' => Carbon::now(),
 				]);
 

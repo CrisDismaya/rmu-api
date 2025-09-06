@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\system_menu;
 use App\Models\menu_mapping;
-use Illuminate\Support\Facades\Log;
+use App\Enums\ApprovableModule;
 
 class SystemMenuController extends BaseController
 {
@@ -28,31 +28,34 @@ class SystemMenuController extends BaseController
 	}
 
 	public function menuList($id)
-	{
+    {
+        try {
+            $approvableIds = ApprovableModule::values();
+            $approvableIdsString = $approvableIds ? implode(',', $approvableIds) : 'NULL';
 
-		try {
+            return DB::table('system_menu as sm')
+                ->select(
+                    'sm.id',
+                    'sm.category_name',
+                    'sm.parent_id',
+                    DB::raw("(SELECT pn.menu_name FROM system_menu pn WHERE pn.id = sm.parent_id) AS parent_name"),
+                    'sm.menu_name',
+                    'sm.file_path',
+                    DB::raw("CASE WHEN sm.status = '1' THEN 'Active' ELSE 'Inactive' END AS menu_status"),
+                    DB::raw("CASE WHEN rm.menu_id = sm.id THEN 'true' ELSE 'false' END AS isCheck"),
+                    'rm.id AS map_id',
+                    DB::raw("CASE WHEN sm.id IN ($approvableIdsString) THEN 'true' ELSE 'false' END AS is_approvable")
+                )
+                ->leftJoin('user_role_menu_mapping as rm', function ($join) use ($id) {
+                    $join->on('sm.id', '=', 'rm.menu_id')
+                        ->where('rm.user_role_id', '=', $id);
+                })
+                ->get();
 
-			return DB::table('system_menu as sm')
-				->select(
-					'sm.id',
-					'sm.category_name',
-					'sm.parent_id',
-					DB::raw("(SELECT  pn.menu_name FROM system_menu pn WHERE pn.id = sm.parent_id) AS parent_name"),
-					'sm.menu_name',
-					'sm.file_path',
-					DB::raw("CASE WHEN sm.status = '1' THEN 'Active' ELSE 'Inactive' END AS menu_status"),
-					DB::raw("CASE WHEN rm.menu_id = sm.id THEN 'true' ELSE 'false' END AS isCheck"),
-					'rm.id AS map_id'
-				)
-				->leftJoin('user_role_menu_mapping as rm', function ($join) use ($id) {
-					$join->on('sm.id', '=', 'rm.menu_id')
-						->where('rm.user_role_id', '=', $id);
-				})
-				->get();
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	public function createSystemMenu(Request $request)
 	{

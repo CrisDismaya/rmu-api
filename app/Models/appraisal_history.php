@@ -8,4 +8,16 @@ use Illuminate\Database\Eloquent\Model;
 class appraisal_history extends Model
 {
     use HasFactory;
+
+    protected $table = 'appraisal_history';
+
+    protected $fillable = [
+        'appraisal_req_id',
+        'branch',
+        'old_price',
+        'appraised_price',
+        'date_approved',
+        'remarks',
+        'approver',
+    ];
 }

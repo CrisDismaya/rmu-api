@@ -8,10 +8,12 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use App\Models\RequestApproval;
 use App\Models\unit_aging;
 use App\Models\receive_unit;
 use App\Models\sold_unit;
+use App\Models\user_role;
 use App\Http\Traits\helper;
 use App\Http\Traits\acumaticaService;
 use App\Http\Traits\ResuableQuery;
@@ -181,10 +183,21 @@ class RequestApprovalController extends BaseController
     public function getAllReceivedUnit($moduleid)
     {
         try {
+            $user = DB::table('users')
+                ->select(
+                    DB::raw("users.branch AS branch_id"),
+                    DB::raw("users.id AS user_id"),
+                    DB::raw("roles.id AS role_id")
+                )
+                ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
+                ->where('users.id', Auth::user()->id)
+                ->first();
+
+
             $cteQuery = $this->cteQuery();
 
             $stmt = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId;
+                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId, @branchId INT = :branchId;
                 {$cteQuery}
 
                 SELECT
@@ -281,31 +294,31 @@ class RequestApprovalController extends BaseController
                 WHERE
                     (
                         ( -- approver
-                            (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId) = 1
-                                AND req_app.status = 0 AND req_app.approver = @userId
+                            (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId) = 1
+                                AND req_app.status = 0 AND req_app.approver = @roleId
                         )
                         OR
                         ( -- not approver possible warehouse custodian
-                            (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId) != 1
-                                AND req_app.status IN ('0', '2') AND req_app.created_by = @userId
+                            (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId) != 1
+                                AND req_app.status IN ('0', '2') AND req_app.branch = @branchId
                         )
                     )
                 ORDER BY req_app.created_at DESC
                 ",
-                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
+                [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id, 'branchId' => $user->branch_id ]
             );
 
             $role = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId;
+                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId;
                 {$cteQuery}
 
                 SELECT
-                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
+                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
                         WHEN 1 THEN 'Approver'
                         ELSE 'Maker'
                     END AS roles
                 ",
-                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
+                [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id ]
             );
 
             $datatables = Datatables::of($stmt);
@@ -378,19 +391,30 @@ class RequestApprovalController extends BaseController
     {
 
         try {
+            $auth = Auth::user();
+            $user = DB::table('users')
+                ->select(
+                    "users.branch",
+                    DB::raw("users.id AS user_id"),
+                    DB::raw("roles.id AS role_id")
+                )
+                ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
+                ->where('users.id', $auth->id)
+                ->first();
+
             $cteQuery = $this->cteQuery();
 
             $role = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId;
+                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId;
                 {$cteQuery}
 
                 SELECT
-                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
+                    CASE (SELECT COUNT(DISTNCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId)
                         WHEN 1 THEN 'Approver'
                         ELSE 'Maker'
                     END AS roles
                 ",
-                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
+                [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id ]
             );
 
             $data = DB::table('repo_details as repo')
@@ -450,9 +474,9 @@ class RequestApprovalController extends BaseController
                 ->join('customer_profile as new_owner', 'sold_unit.new_customer', 'new_owner.id');
 
             if ($role[0]->roles == 'Approver') {
-                $data->where('sold_unit.status', '0')->where('sold_unit.approver', Auth::user()->id);
+                $data->where('sold_unit.status', '0')->whereIn('sold_unit.approver', [$user->user_id, $user->role_id]);
             } else {
-                $data->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.maker', Auth::user()->id);
+                $data->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.branch', $user->branch);
             }
 
             return Datatables::of($data)
@@ -1121,69 +1145,93 @@ class RequestApprovalController extends BaseController
 
     public function submitRequestDecision(Request $request)
     {
-
         try {
-
             $validator = Validator::make($request->all(), [
-                'data_id' => 'required',
-                'remarks' => 'required',
-                'status' => 'required',
+                'data_id'   => 'required|integer',
+                'module_id' => 'required|integer',
+                'remarks'   => 'required|string',
+                'status'    => 'required', // 1=approve, 2=disapprove
             ]);
 
             if ($validator->fails()) {
                 return $this->sendError('Validation Error.', $validator->errors());
             }
 
-            // get the transaction id
-            $data = RequestApproval::where('received_unit_id', $request->data_id)->orderBy('id', 'DESC')->first();
+            $userId   = Auth::id();
+            $roleId   = user_role::where('user_role_name', Auth::user()->userrole)->value('id');
+            $moduleId = $request->module_id;
+            $recordId = $request->data_id;
 
-            $first_approver = 0;
+            $data = RequestApproval::where('received_unit_id', $recordId)
+                ->orderByDesc('id')
+                ->first();
+
+            $check = $this->checkIfApproved($moduleId, $data->id, $roleId);
+            if ($check['status']) {
+                $approverName = $check['name'] ?? 'Unknown Approver';
+
+                return $this->sendError(
+                    "This request has already been approved by {$approverName}.",
+                    ['approver' => $check['approver']]
+                );
+            }
+
+            if (!$data) {
+                return $this->sendError('Request not found.');
+            }
+
+            $firstApprover = 0;
             $sequence = 0;
             if ($request->status == 1) {
-                $fetch_sequence = $this->approverDecision($request->module_id, $data->id, Auth::user()->id);
-                if ($fetch_sequence == 0) {
-                    $get_unit = receive_unit::select('principal_balance')->where('id', $request->data_id)->first();
+                $sequence = $this->approverDecision($request->module_id, $data->id, $recordId);
+                if ($sequence == 0) {
 
-                    $appraisal_log = new appraisal_history;
-                    $appraisal_log->appraisal_req_id = $data->id;
-                    $appraisal_log->branch = Auth::user()->branch;
-                    $appraisal_log->old_price = $request->old_price;
-                    $appraisal_log->appraised_price = $request->approved_price;
-                    $appraisal_log->date_approved = Carbon::now();
-                    $appraisal_log->remarks = $request->remarks;
-                    $appraisal_log->approver = Auth::user()->id;
-                    $appraisal_log->save();
+                    appraisal_history::create([
+                        'appraisal_req_id' => $data->id,
+                        'branch'           => Auth::user()->branch,
+                        'old_price'        => $request->old_price,
+                        'appraised_price'  => $request->approved_price,
+                        'date_approved'    => Carbon::now(),
+                        'remarks'          => $request->remarks,
+                        'approver'         => $userId,
+                    ]);
 
-                    // receive_unit::where('id', $request->data_id)->update(['principal_balance' => $data->approved_price]);
-                    receive_unit::where('id', $request->data_id)->update(['status' => $request->status]);
-                    RequestApproval::where('id', $data->id)->update(['status' => $request->status]);
+                    receive_unit::where('id', $recordId)->update(['status' => 1]);
+                    RequestApproval::where('id', $data->id)->update(['status' => 1]);
                 }
-                $sequence = $fetch_sequence;
             } else if ($request->status == 2) {
-                $fetch_first_approver = $this->disapprovedDecision($request->module_id, $data->id, Auth::user()->id);
-                receive_unit::where('id', $request->data_id)->update(['status' => $request->status]);
-                RequestApproval::where('id', $data->id)->update(['status' => $request->status, 'approver' => $fetch_first_approver]);
-                $first_approver = $fetch_first_approver;
+                $firstApprover = $this->disapprovedDecision($moduleId, $data->id, $recordId);
+
+                receive_unit::where('id', $recordId)->update(['status' => 2]);
+                RequestApproval::where('id', $data->id)->update([
+                    'status'   => 2,
+                    'approver' => $firstApprover
+                ]);
+
+                RequestApproval::where('id', $data->id)->update(['status' => $request->status, 'approver' => $firstApprover]);
             }
 
             $arr = [
-                'approver' => $first_approver > 0 ? $first_approver : ($sequence == 0 ? Auth::user()->id : $sequence),
+                'approver' => $firstApprover > 0 ? $firstApprover : ($sequence == 0 ? $roleId : $sequence),
                 'date_approved' => $request->status == 1 ? Carbon::now() : null,
                 'remarks' => $request->remarks
             ];
 
-            if ($request->edit_price) {
+            if (!empty($request->edit_price)) {
                 $arr['edited_price'] = $data->approved_price;
             }
 
+            RequestApproval::where('received_unit_id', $recordId)->update($arr);
 
-            $updateRequest = RequestApproval::where('received_unit_id', $request->data_id)
-                ->update($arr);
-            $msg = $request->status == 1 ? 'Request for approval successfully approved!' : 'Request for approval successfully disapproved!';
-            return $this->sendResponse([], $msg);
+            return $this->sendResponse([], $request->status == 1
+                ? 'Request for approval successfully approved!'
+                : 'Request for approval successfully disapproved!'
+            );
+
         } catch (\Throwable $th) {
-            $this->rollBaclDecision($request->module_id, $data->id, Auth::user()->id);
-            return $this->sendError($th->errorInfo[2]);
+            DB::rollBack();
+			$this->rollBaclDecision($request->module_id, $data->id, $roleId);
+			return $this->sendError($th->getMessage());
         }
     }
 
@@ -1514,11 +1562,12 @@ class RequestApprovalController extends BaseController
         }
     }
 
-    public function appraisedUnitList()
+    public function appraisedUnitList(Request $request)
     {
         try {
+            $statusFilter = $request->input('status');
 
-            $received_units = DB::table('repo_details as repo')
+            $stmt = DB::table('repo_details as repo')
                 ->join('branches as br', 'repo.branch_id', 'br.id')
                 ->join('brands as brd', 'repo.brand_id', 'brd.id')
                 ->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
@@ -1539,18 +1588,30 @@ class RequestApprovalController extends BaseController
                     'old_owner.lastname as o_lastname',
                     'appraised.date_approved',
                     'appraised.approved_price',
-                    DB::raw("CASE WHEN appraised.status = '0' THEN 'PENDING'
-            WHEN appraised.status = '1' THEN 'APPROVED' ELSE 'DISAPPROVED' END status"),
+                    DB::raw("
+                        CASE appraised.status
+                            WHEN 0 THEN 'PENDING'
+                            WHEN 1 THEN 'APPROVED'
+                            ELSE 'DISAPPROVED'
+                        END as status
+                    "),
+                    'appraised.created_at'
                 );
 
             if (Auth::user()->userrole == 'Warehouse Custodian') {
-                $received_units = $received_units->where('repo.branch_id', Auth::user()->branch)->get();
-            } else {
-                $received_units = $received_units->get();
+                $stmt->where('repo.branch_id', Auth::user()->branch);
             }
 
+            if ($statusFilter !== null && $statusFilter !== 'all') {
+                $stmt->where('appraised.status', (int) $statusFilter);
+            }
 
-            return $received_units;
+            return Datatables::of($stmt)
+                ->order(function ($q) {
+                    $q->orderByDesc('appraised.created_at');
+                })
+                ->make(true);
+
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }

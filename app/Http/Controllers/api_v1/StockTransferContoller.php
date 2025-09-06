@@ -14,17 +14,19 @@ use App\Models\receive_unit;
 use App\Models\FilesUploaded;
 use App\Models\stock_transfer;
 use App\Models\stock_transfer_units;
+use App\Models\user_role;
 use App\Models\approval_matrix_setting;
 use App\Http\Traits\helper;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\Log;
 use App\Http\Traits\TransactionNumberGenerator;
+use App\Http\Traits\ApprovalSequence;
 
 class StockTransferContoller extends BaseController
 {
 	//
 	use helper;
-    use TransactionNumberGenerator;
+    use TransactionNumberGenerator, ApprovalSequence;
 
 	public function branchesList()
 	{
@@ -100,6 +102,11 @@ class StockTransferContoller extends BaseController
 	public function getAllForApprovals(Request $request, $moduleid)
     {
         try {
+            $user = Auth::user();
+            $id = $user->id;
+            $role = $user->userrole;
+            $branch = $user->branch;
+
             $query = DB::table('stock_transfer_approval as sta')
                 ->leftJoin('users as usr', 'sta.created_by', '=', 'usr.id')
                 ->select(
@@ -108,7 +115,7 @@ class StockTransferContoller extends BaseController
                     DB::raw("(SELECT NAME FROM branches WHERE id = sta.from_branch) AS from_branch"),
                     DB::raw("(SELECT NAME FROM branches WHERE id = sta.to_branch) AS to_branch"),
                     'sta.approver AS approver_id',
-                    DB::raw("(SELECT CONCAT(firstname,' ',lastname) FROM users WHERE id = sta.approver) AS approver_name"),
+                    DB::raw("(SELECT user_role_name FROM user_role WHERE id = sta.approver) AS approver_name"),
                     DB::raw("CONCAT(usr.firstname,' ',usr.lastname) AS created_by"),
                     DB::raw("(SELECT COUNT(recieved_unit_id) FROM stock_transfer_unit WHERE stock_transfer_id = sta.id) AS transfer_units_count"),
                     DB::raw("CASE WHEN sta.remarks IS NULL THEN '' ELSE sta.remarks END AS remarks"),
@@ -117,10 +124,18 @@ class StockTransferContoller extends BaseController
                     DB::raw("CASE WHEN sta.status = '0' THEN 'Pending' WHEN sta.status = '1' THEN 'Approved' WHEN sta.status = '2' THEN 'Disapproved' ELSE '' END AS approval_status")
                 );
 
-            if (Auth::user()->userrole == 'Verifier' || Auth::user()->userrole == 'General Manager') {
-                $query->where('sta.approver', Auth::user()->id);
-            } elseif (Auth::user()->userrole == 'Warehouse Custodian') {
-                $query->where('sta.from_branch', Auth::user()->branch);
+            if ($role == 'Verifier' || $role == 'General Manager') {
+                $query->where(function ($q) use ($id) {
+                    $q->where('sta.approver', function ($subQuery) use ($id) {
+                        $subQuery->select('roles.id')
+                            ->from('users')
+                            ->join('user_role as roles', 'users.userrole', '=', 'roles.user_role_name')
+                            ->where('users.id', $id)
+                            ->limit(1);
+                    });
+                });
+            } elseif ($role == 'Warehouse Custodian') {
+                $query->where('sta.from_branch', $branch);
             }
 
             return DataTables::of($query)
@@ -174,84 +189,105 @@ class StockTransferContoller extends BaseController
 
 	public function createStockTransfer(Request $request)
 	{
-		try {
-			$validator = Validator::make($request->all(), [
-				'module_id' => 'required',
-				'transfer_to_branch' => 'required|numeric',
-				'list_of_transfer' => 'required',
-				'reason_for_transfer' => 'required'
-			]);
+        $validator = Validator::make($request->all(), [
+            'module_id'           => 'required',
+            'transfer_to_branch'  => 'required|numeric',
+            'list_of_transfer'    => 'required|json',
+            'reason_for_transfer' => 'required|string'
+        ]);
 
-			if ($validator->fails()) {
-				return $this->sendError('Validation Error.', $validator->errors());
-			}
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
+        }
 
-			$stock_format = [
-				'from_branch' => Auth::user()->branch,
-				'to_branch' => $request->transfer_to_branch,
-				'created_by' => Auth::user()->id,
-				'reason_for_transfer' => $request->reason_for_transfer,
-			];
+        return DB::transaction(function () use ($request) {
+            $stockTransfer = stock_transfer::create([
+                'from_branch'         => Auth::user()->branch,
+                'to_branch'           => $request->transfer_to_branch,
+                'created_by'          => Auth::id(),
+                'reason_for_transfer' => $request->reason_for_transfer,
+            ]);
 
-			DB::beginTransaction();
+            $transactionNumber = $this->generateTransactionNumber(
+                'stock_transfer',
+                null,
+                $stockTransfer->created_at
+            );
 
-			$stock = stock_transfer::create($stock_format);
-			$rec_id = $stock->id;
+            $stockTransfer->update(['reference_code' => $transactionNumber]);
 
-            $transactionNumber = $this->generateTransactionNumber('stock_transfer', null, $stock->created_at);
+            $units = json_decode($request->list_of_transfer, true);
+            foreach ($units as $unitId) {
+                stock_transfer_units::create([
+                    'stock_transfer_id' => $stockTransfer->id,
+                    'recieved_unit_id'  => $unitId
+                ]);
+            }
 
-			stock_transfer::where('id', $rec_id)->update(['reference_code' => $transactionNumber]);
+            $firstApproverId = $this->assignFirstApprover((int) $request->module_id);
 
-			$arr_of_units = json_decode($request->list_of_transfer, true);
+            if (!$firstApproverId) {
+                throw new \Exception("No approver found for this module.");
+            }
 
-			foreach ($arr_of_units as $val) {
-				$units_format = [
-					'stock_transfer_id' => $rec_id,
-					'recieved_unit_id' => $val
-				];
-				stock_transfer_units::create($units_format);
-			}
+            $stockTransfer->update([ 'approver' => $firstApproverId ]);
 
-			$matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $rec_id);
-
-			if ($matrix['status'] == 'error') {
-				return $matrix;
-			} else {
-				//update the first holder of the transaction
-				stock_transfer::where('id', $rec_id)->update(['approver' => $matrix['message']]);
-			}
-			DB::commit();
-
-			return $this->sendResponse([], 'Stock Transfer Successfully Saved');
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
+            return $this->sendResponse([], 'Stock Transfer Successfully Saved');
+        });
 	}
 
 	public function submitApproverDecision(Request $request)
-	{
-		try {
-			$validator = Validator::make($request->all(), [
-				'id' => 'required|numeric',
-				'status' => 'required|numeric',
-				'module_id' => 'required|numeric',
-				'remarks' => 'nullable'
-			]);
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'id'        => 'required|numeric',
+                'status'    => 'required|numeric',
+                'module_id' => 'required|numeric',
+                'remarks'   => 'nullable'
+            ]);
 
-			if ($validator->fails()) {
-				return $this->sendError('Validation Error.', $validator->errors());
-			}
-			DB::beginTransaction();
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
 
-			$first_approver = 0;
-			$sequence = 0;
-			if ($request->status == 1) {
-				$fetch_sequence = $this->approverDecision($request->module_id, $request->id, Auth::user()->id);
-				if ($fetch_sequence == 0) {
-					stock_transfer::where('id', $request->id)->update(['status' => $request->status]);
+            $userId   = Auth::id();
+            $roleId   = user_role::where('user_role_name', Auth::user()->userrole)->value('id');
+            $moduleId = $request->module_id;
+            $recordId = $request->id;
 
-                    $units  = stock_transfer_units::where('stock_transfer_id', $request->id)->get();
+            // ✅ check if already approved
+            $check = $this->checkIfApproved($moduleId, $recordId, $roleId);
+            if ($check['status']) {
+                $approverName = $check['name'] ?? 'Unknown Approver';
+                return $this->sendError(
+                    "This request has already been approved by {$approverName}.",
+                    ['approver' => $check['approver']]
+                );
+            }
+
+            DB::beginTransaction();
+
+            $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
+
+            $nextApproverId = null;
+
+            // ✅ Approval flow
+            if ($request->status == 1) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'A');
+
+                $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
+
+
+                if ($nextApprover) {
+                    $nextApproverId = $nextApprover->approverId;
+                } else {
+                    // no more approvers, mark record as fully approved
+                    stock_transfer::where('id', $recordId)
+                        ->update(['status' => 1]);
+
+                    $units = stock_transfer_units::where('stock_transfer_id', $recordId)->get();
                     $startCount = $this->forInventoryOutCount();
+
                     foreach ($units as $index => $unit) {
                         $rowNumber = $startCount + $index;
                         $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, now());
@@ -261,35 +297,41 @@ class StockTransferContoller extends BaseController
                             'inventory_out_at' => now(),
                         ]);
                     }
-				}
-				$sequence = $fetch_sequence;
-			} else if ($request->status == 2) {
-				$fetch_first_approver = $this->disapprovedDecision($request->module_id, $request->id, Auth::user()->id);
-				stock_transfer::where('id', $request->id)
-					->update(['status' => $request->status, 'approver' => $fetch_first_approver]);
-				$first_approver = $fetch_first_approver;
-			}
+                }
+            }
 
-			stock_transfer::where('id', $request->id)
-				->update([
-					'approver' => $first_approver > 0 ? $first_approver : ($sequence == 0 ? Auth::user()->id : $sequence),
-					'date_approved' => Carbon::now(),
-					'remarks' => (($sequence == 0 || $request->status == 2) ? $request->remarks : null),
-				]);
+            if ($request->status == 2) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, 1, null);
 
-			if ($request->status == 2) {
-				stock_transfer_units::where('stock_transfer_id', $request->id)->update(['is_received' => 9, 'is_use_old_files' => 9]);
-			}
+                stock_transfer::where('id', $recordId)->update([
+                    'status'   => 2,
+                    'approver' => $roleId
+                ]);
 
-			DB::commit();
+                stock_transfer_units::where('stock_transfer_id', $recordId)
+                    ->update(['is_received' => 9, 'is_use_old_files' => 9]);
+            }
 
-			$msg = $request->status == 1 ? 'Request for approval successfully approved!' : 'Request for approval successfully disapproved!';
-			return $this->sendResponse([], $msg);
-		} catch (\Throwable $th) {
-			$this->rollBaclDecision($request->module_id, $request->id, Auth::user()->id);
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+            stock_transfer::where('id', $recordId)->update([
+                'approver'      => $nextApproverId ?? $roleId,
+                'date_approved' => now(),
+                'remarks'       => $request->remarks,
+            ]);
+
+            DB::commit();
+
+            return $this->sendResponse([],
+                $request->status == 1
+                    ? 'Request successfully approved!'
+                    : 'Request successfully disapproved!'
+            );
+
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            $this->rollBaclDecision($request->module_id, $request->id, $roleId);
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	public function getAllReceiveStockTransfer(Request $request)
     {

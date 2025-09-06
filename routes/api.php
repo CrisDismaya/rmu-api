@@ -48,6 +48,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('userroles', [UserController::class, 'getRoles']);
 			Route::post('register', [UserController::class, 'register']);
 			Route::get('users', [UserController::class, 'users']);
+			Route::get('roles', [UserController::class, 'roles']);
 			Route::post('updateUser/{id}', [UserController::class, 'updateUser']);
 			Route::post('createMatrix', [UserController::class, 'createApprovalMatrix']);
 			Route::get('removeMatrix/{id}', [UserController::class, 'removeMatrix']);
@@ -142,7 +143,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			//inventory
 			Route::get('InventoryMasterList', [RequestApprovalController::class, 'UnitInventoryMasterList']);
 			Route::get('SoldMasterList', [RequestApprovalController::class, 'SoldUnitMasterList']);
-			Route::get('appraisedUnitList', [RequestApprovalController::class, 'appraisedUnitList']);
+			Route::get('appraisedUnitList', [RequestApprovalController::class, 'appraisedUnrepoDetailsPerIditList']);
 			Route::get('getListForApproval/{moduleid}', [RequestApprovalController::class, 'getListForApproval']);
 			Route::get('UnitHistory/{repo_id}', [RequestApprovalController::class, 'UnitHistory']);
 
@@ -172,7 +173,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('getAllForApprovals/{moduleid}', [StockTransferContoller::class, 'getAllForApprovals']);
 			Route::get('getTransferUnits/{id}', [StockTransferContoller::class, 'getTransferUnits']);
 			Route::post('createStockTransfer', [StockTransferContoller::class, 'createStockTransfer']);
-			Route::post('submitApproverDecision', [StockTransferContoller::class, 'submitApproverDecision']);
+			Route::post('transfer/submitApproverDecision', [StockTransferContoller::class, 'submitApproverDecision']);
 
 			Route::get('getAllReceiveStockTransfer', [StockTransferContoller::class, 'getAllReceiveStockTransfer']);
 			Route::post('getAllFileUploaded', [StockTransferContoller::class, 'getAllFileUploaded']);
@@ -213,6 +214,5 @@ Route::middleware('auth:sanctum')->group( function () {
             Route::get('getPhysicalInventoryFiles', [PhysicalInventoryDocController::class, 'getPhysicalInventoryFiles']);
             Route::post('downloadPhysicalInventory', [PhysicalInventoryDocController::class, 'downloadPhysicalInventory']);
             Route::post('submitApproverDecision', [PhysicalInventoryDocController::class, 'submitApproverDecision']);
-
 	});
 });
