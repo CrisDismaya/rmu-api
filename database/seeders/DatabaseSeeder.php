@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             SystemMenuSeeder::class,
             AddressSeeder::class,
+            SystemMenusTableSeeder::class,
         ]);
     }
 }
