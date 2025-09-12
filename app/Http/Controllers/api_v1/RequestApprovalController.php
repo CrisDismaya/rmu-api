@@ -18,16 +18,16 @@ use App\Http\Traits\helper;
 use App\Http\Traits\acumaticaService;
 use App\Http\Traits\ResuableQuery;
 use Carbon\Carbon;
-use App\Models\approval_matrix_setting;
 use App\Models\appraisal_history;
 use Yajra\DataTables\Facades\DataTables;
 use App\Http\Traits\TransactionNumberGenerator;
+use App\Http\Traits\ApprovalSequence;
 
 class RequestApprovalController extends BaseController
 {
     //
     use helper, acumaticaService, ResuableQuery; //helper traits
-    use TransactionNumberGenerator;
+    use TransactionNumberGenerator, ApprovalSequence;
 
     public function listReceivedUnit()
     {
@@ -216,7 +216,7 @@ class RequestApprovalController extends BaseController
                         WHEN req_app.status = '2' THEN 'DISAPPROVED'
                     END status,
                     req_app.remarks,
-                    CONCAT(holder.firstname,holder.middlename,holder.lastname) as current_holder,
+                    holder.user_role_name as current_holder,
                     CONCAT(maker.firstname,maker.middlename,maker.lastname) as requestor,
                     color.name as color,
                     received.principal_balance,
@@ -253,7 +253,7 @@ class RequestApprovalController extends BaseController
                 LEFT JOIN unit_models model ON repo.model_id = model.id
                 LEFT JOIN unit_colors color ON repo.color_id = color.id
                 LEFT JOIN request_approvals req_app ON received.id = req_app.received_unit_id AND repo.branch_id = req_app.branch
-                LEFT JOIN users holder ON req_app.approver = holder.id
+                LEFT JOIN user_role holder ON req_app.approver = holder.id
                 LEFT JOIN users maker ON req_app.created_by = maker.id
                 LEFT JOIN (
                     SELECT sub.received_unit_id, history.appraised_price AS approved_price
@@ -303,7 +303,7 @@ class RequestApprovalController extends BaseController
                                 AND req_app.status IN ('0', '2') AND req_app.branch = @branchId
                         )
                     )
-                ORDER BY req_app.created_at DESC
+                ORDER BY req_app.id DESC
                 ",
                 [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id, 'branchId' => $user->branch_id ]
             );
@@ -321,9 +321,8 @@ class RequestApprovalController extends BaseController
                 [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id ]
             );
 
-            $datatables = Datatables::of($stmt);
+            return Datatables::of($stmt)->make(true);
 
-            return $datatables->make(true);
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
         }
@@ -1085,62 +1084,87 @@ class RequestApprovalController extends BaseController
 
     public function requestRepoPriceApproval(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'received_unit_id'           => 'required',
+            'repo_id'                    => 'required',
+            'branch'                     => 'required',
+            'unit_age_days'              => 'required',
+            'depreciation_cost'          => 'required',
+            'estimated_missing_dmg_parts'=> 'required',
+            'total_missing_dmg_parts'    => 'required',
+            'suggested_price'            => 'required',
+            'approved_price'             => 'required',
+            'module_id'                  => 'required',
+            'remarks'                    => 'nullable',
+        ]);
 
-        try {
-
-            $rec_id = null;
-
-            $validator = Validator::make($request->all(), [
-                'approved_price' => 'required',
-            ]);
-
-            if ($validator->fails()) {
-                return $this->sendError('Validation Error.', $validator->errors());
-            }
-
-            $input =  $request->all();
-            $input['status'] = '0';
-            $input['created_by'] = Auth::user()->id;
-
-            $check = RequestApproval::where('received_unit_id', $request->received_unit_id)->whereIn('status', [0, 2])->orderBy('id', 'DESC')->first();
-
-            DB::beginTransaction();
-
-            if (!empty($check)) {
-                if ($check->status == 0) {
-                    return $this->sendError('There is pending approval');
-                }
-
-                $getrecord = RequestApproval::select('id')->where('received_unit_id', $request->received_unit_id)->first();
-
-                $update = RequestApproval::where('id', $check->id)
-                    ->update(['approved_price' => $request->approved_price, 'status' => '0']);
-                $updatestatus = receive_unit::where('id', $request->received_unit_id)->update(['status' => '0']);
-                $rec_id = $getrecord->id;
-            } else {
-                $create = RequestApproval::create($input);
-                $rec_id = $create->id;
-
-                $transactionNo = $this->generateTransactionNumber('rdaf', null, $create->created_at);
-                $create->rdaf_transaction_number = $transactionNo;
-                $create->save();
-            }
-
-            $matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $rec_id);
-
-            if ($matrix['status'] == 'error') {
-                return $matrix;
-            } else {
-                //update the first holder of the transaction
-                $save_holder = RequestApproval::where('id', $rec_id)->update(['approver' => $matrix['message']]);
-            }
-
-            DB::commit();
-
-            return $this->sendResponse([], 'Request for approval successfully saved!');
-        } catch (\Throwable $th) {
-            return $this->sendError($th->errorInfo[2]);
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
         }
+
+        return DB::transaction(function () use ($request) {
+            $userId = Auth::id();
+
+            // Check existing request
+            $existing = RequestApproval::where('received_unit_id', $request->received_unit_id)
+                ->whereIn('status', [0, 2]) // pending or disapproved
+                ->orderByDesc('id')
+                ->first();
+
+            if ($existing && $existing->status == 0) {
+                return $this->sendError('There is already a pending approval for this unit.');
+            }
+
+            if ($existing && $existing->status == 2) {
+                // Reuse disapproved → reset to pending
+                $existing->update([
+                    'approved_price' => $request->approved_price,
+                    'remarks'        => null,
+                    'status'         => 0,
+                    'created_by'     => $userId,
+                ]);
+
+                receive_unit::where('id', $request->received_unit_id)
+                    ->update(['status' => 0]);
+
+                $approval = $existing;
+            } else {
+                // Fresh create
+                $approval = RequestApproval::create([
+                    'received_unit_id'            => $request->received_unit_id,
+                    'repo_id'                     => $request->repo_id,
+                    'branch'                      => $request->branch,
+                    'unit_age_days'               => $request->unit_age_days,
+                    'depreciation_cost'           => $request->depreciation_cost,
+                    'estimated_missing_dmg_parts' => $request->estimated_missing_dmg_parts,
+                    'total_missing_dmg_parts'     => $request->total_missing_dmg_parts,
+                    'suggested_price'             => $request->suggested_price,
+                    'approved_price'              => $request->approved_price,
+                    'status'                      => 0,
+                    'remarks'                     => null,
+                    'created_by'                  => $userId,
+                ]);
+
+                // Generate transaction number
+                $transactionNo = $this->generateTransactionNumber('rdaf', null, $approval->created_at);
+                $approval->update(['rdaf_transaction_number' => $transactionNo]);
+
+                // Mark receive_unit as pending
+                receive_unit::where('id', $request->received_unit_id)
+                    ->update(['status' => 0]);
+            }
+
+            // Assign first approver
+            $firstApproverId = $this->assignFirstApprover((int) $request->module_id);
+
+            if (!$firstApproverId) {
+                throw new \Exception("No approver found for this module.");
+            }
+
+            $approval->update(['approver' => $firstApproverId]);
+
+            return $this->sendResponse([], 'Request for price appraisal successfully saved!');
+        });
     }
 
     public function submitRequestDecision(Request $request)
@@ -1166,10 +1190,10 @@ class RequestApprovalController extends BaseController
                 ->orderByDesc('id')
                 ->first();
 
+            // check if already approved
             $check = $this->checkIfApproved($moduleId, $data->id, $roleId);
             if ($check['status']) {
                 $approverName = $check['name'] ?? 'Unknown Approver';
-
                 return $this->sendError(
                     "This request has already been approved by {$approverName}.",
                     ['approver' => $check['approver']]
@@ -1180,11 +1204,22 @@ class RequestApprovalController extends BaseController
                 return $this->sendError('Request not found.');
             }
 
-            $firstApprover = 0;
-            $sequence = 0;
+            DB::beginTransaction();
+
+            $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
+            $nextApproverId = null;
+
             if ($request->status == 1) {
-                $sequence = $this->approverDecision($request->module_id, $data->id, $recordId);
-                if ($sequence == 0) {
+                $this->logApproval($moduleId, $data->id, $userId, $roleId, $currentApprover->level, 'A');
+
+                $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
+
+                if ($nextApprover) {
+                    $nextApproverId = $nextApprover->approverId;
+                } else {
+                    receive_unit::where('id', $recordId)->update(['status' => 1]);
+
+                    RequestApproval::where('id', $data->id)->update(['status' => 1]);
 
                     appraisal_history::create([
                         'appraisal_req_id' => $data->id,
@@ -1195,37 +1230,34 @@ class RequestApprovalController extends BaseController
                         'remarks'          => $request->remarks,
                         'approver'         => $userId,
                     ]);
-
-                    receive_unit::where('id', $recordId)->update(['status' => 1]);
-                    RequestApproval::where('id', $data->id)->update(['status' => 1]);
                 }
-            } else if ($request->status == 2) {
-                $firstApprover = $this->disapprovedDecision($moduleId, $data->id, $recordId);
+            }
 
-                receive_unit::where('id', $recordId)->update(['status' => 2]);
+            if ($request->status == 2) {
+                $this->logApproval($moduleId, $data->id, $userId, $roleId, $currentApprover->level, null);
+
+                receive_unit::where('id', $recordId)
+                    ->update(['status' => 2]);
+
                 RequestApproval::where('id', $data->id)->update([
                     'status'   => 2,
-                    'approver' => $firstApprover
+                    'approver' => $roleId
                 ]);
-
-                RequestApproval::where('id', $data->id)->update(['status' => $request->status, 'approver' => $firstApprover]);
             }
 
-            $arr = [
-                'approver' => $firstApprover > 0 ? $firstApprover : ($sequence == 0 ? $roleId : $sequence),
-                'date_approved' => $request->status == 1 ? Carbon::now() : null,
-                'remarks' => $request->remarks
-            ];
+            RequestApproval::where('id', $data->id)->update([
+                'approver'      => $nextApproverId ?? $roleId,
+                'date_approved' => $request->status == 1 ? now() : null,
+                'remarks'       => $request->remarks,
+                'edited_price'  => $request->edit_price ? $data->approved_price : null,
+            ]);
 
-            if (!empty($request->edit_price)) {
-                $arr['edited_price'] = $data->approved_price;
-            }
+            DB::commit();
 
-            RequestApproval::where('received_unit_id', $recordId)->update($arr);
-
-            return $this->sendResponse([], $request->status == 1
-                ? 'Request for approval successfully approved!'
-                : 'Request for approval successfully disapproved!'
+            return $this->sendResponse([],
+                $request->status == 1
+                    ? 'Price appraisal successfully approved!'
+                    : 'Price appraisal successfully disapproved!'
             );
 
         } catch (\Throwable $th) {

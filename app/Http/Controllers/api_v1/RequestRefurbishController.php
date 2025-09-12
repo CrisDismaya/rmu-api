@@ -11,110 +11,107 @@ use Illuminate\Support\Facades\Log;
 use App\Models\request_refurbish;
 use App\Models\refurbish_detail;
 use App\Models\refurbishProcess;
+use App\Models\repo AS RepoDetails;
+use App\Models\user_role;
 use Illuminate\Http\Request;
 use App\Http\Traits\helper;
 use App\Http\Traits\ResuableQuery;
-use Carbon\Carbon;
 use Yajra\Datatables\Datatables;
+use App\Http\Traits\ApprovalSequence;
 
 class RequestRefurbishController extends BaseController
 {
 	//
-	use helper, ResuableQuery;
+	use helper, ResuableQuery, ApprovalSequence;
 
 	public function listOfForRefurbish()
 	{
-
 		try {
+            $user = Auth::user();
 
-			$list_id = array();
+            $stmt = RepoDetails::query()
+                ->select([
+                    'received.id as receive_id',
+                    'repo.id as repo_id',
+                    'repo.model_engine',
+                    'repo.model_chassis',
+                    'repo.date_sold',
+                    'branch.name as branchname',
+                    'brand.brandname',
+                    'model.model_name',
+                    'color.name as color'
+                ])
+                ->from('repo_details as repo')
+                ->join('recieve_unit_details as received', 'repo.id', '=', 'received.repo_id')
+                ->join('branches as branch', 'repo.branch_id', '=', 'branch.id')
+                ->join('brands as brand', 'repo.brand_id', '=', 'brand.id')
+                ->join('unit_models as model', 'repo.model_id', '=', 'model.id')
+                ->join('unit_colors as color', 'repo.color_id', '=', 'color.id')
+                ->leftJoin(DB::raw("
+                    (
+                        SELECT
+                            repo.id AS repo_id,
+                            COUNT(upload.id) AS total_upload_required_files
+                        FROM repo_details repo
+                        LEFT JOIN files_uploaded upload
+                            ON repo.id = upload.reference_id
+                        AND repo.branch_id = upload.branch_id
+                        INNER JOIN (
+                            SELECT * FROM files WHERE isRequired = 1 AND status = 1
+                        ) files ON upload.files_id = files.id
+                        WHERE upload.is_deleted = 0
+                        GROUP BY repo.id, upload.branch_id
+                    ) files
+                "), 'files.repo_id', '=', 'repo.id')
+                ->leftJoin('sold_units as sold', function ($join) {
+                    $join->on('repo.id', '=', 'sold.repo_id')
+                        ->on('branch.id', '=', 'sold.branch')
+                        ->where('sold.status', '=', 0);
+                })
+                ->leftJoin('request_approvals as appraisal', function ($join) {
+                    $join->on('repo.id', '=', 'appraisal.repo_id')
+                        ->on('branch.id', '=', 'appraisal.branch')
+                        ->where('appraisal.status', '=', 0);
+                })
+                ->leftJoin(DB::raw("
+                    (
+                        SELECT units.recieved_unit_id AS received_id
+                        FROM stock_transfer_unit units
+                        INNER JOIN stock_transfer_approval approval
+                            ON units.stock_transfer_id = approval.id
+                        WHERE approval.status = 0
+                    ) stock
+                "), 'received.id', '=', 'stock.received_id')
+                ->leftJoin('request_refurbishes as refurbish', function ($join) {
+                    $join->on('repo.id', '=', 'refurbish.repo_id')
+                        ->on('branch.id', '=', 'refurbish.branch');
+                })
+                ->where('received.status', '!=', 4)->where('received.is_sold', 'N')
+                ->whereRaw('ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)')
+                ->whereRaw('ISNULL((SELECT COUNT(*) FROM recieve_unit_spare_parts WHERE recieve_id = received.id AND is_deleted = 0 AND refurb_id IS NULL), 0) > 0')
+                ->whereNull('sold.id')
+                ->whereNull('appraisal.id')
+                ->whereNull('stock.received_id')
+                ->whereNull('refurbish.repo_id');
 
-			$get_all_repo =  request_refurbish::select('repo_id')->whereIn('status', ['0', '3'])->get();
-
-			foreach ($get_all_repo as $repo) {
-				array_push($list_id, $repo->repo_id);
+            if ($user->userrole == 'Warehouse Custodian') {
+				$stmt->where('branch.id', $user->branch);
 			}
 
-			$data = DB::table('recieve_unit_details AS rud')
-				->join('repo_details as repo', 'repo.id', 'rud.repo_id')
-				->join('branches as br', 'repo.branch_id', 'br.id')
-				->join('brands as brd', 'repo.brand_id', 'brd.id')
-				->join('unit_models as mdl', 'repo.model_id', 'mdl.id')
-				->join('unit_colors as color', 'repo.color_id', 'color.id')
-				->leftJoin(
-					DB::raw("(
-							SELECT
-								repo.id AS repo_id, COUNT(upload.id) AS total_upload_required_files
-							FROM repo_details repo
-							LEFT JOIN files_uploaded upload ON repo.id = upload.reference_id AND repo.branch_id = upload.branch_id
-							INNER JOIN (
-								SELECT * FROM files WHERE isRequired = 1 AND status = 1
-							) files ON upload.files_id = files.id
-							WHERE upload.is_deleted = 0
-							GROUP BY repo.id, upload.branch_id
-						) files"),
-					"files.repo_id",
-					"=",
-					"repo.id"
-				)
-				->select(
-					'rud.id as receive_id',
-					'repo.id as repo_id',
-					'repo.model_engine',
-					'repo.model_chassis',
-					'repo.date_sold',
-					'br.name as branchname',
-					'brd.brandname',
-					'mdl.model_name',
-					'color.name as color'
-				)
-				->where('rud.status', '!=', '4')
-				->where('rud.is_sold', '=', 'N')
-				->whereRaw('ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)')
-				->whereRaw('ISNULL((SELECT COUNT(*) FROM recieve_unit_spare_parts WHERE recieve_id = rud.id AND is_deleted = 0 AND refurb_id IS NULL), 0) > 0')
-				->whereNotExists(function ($query) {
-					$query->select(DB::raw(1))
-						->from('sold_units')
-						->whereRaw('sold_units.repo_id = repo.id')
-						->whereRaw('sold_units.status = 0')
-						->whereRaw('sold_units.branch =' . Auth::user()->branch);
-				})
-				->whereNotExists(function ($query) {
-					$query->select(DB::raw(1))
-						->from('request_approvals')
-						->whereRaw('request_approvals.repo_id = repo.id')
-						->whereRaw('request_approvals.status = 0')
-						->whereRaw('request_approvals.branch =' . Auth::user()->branch);
-				})
-				->whereNotExists(function ($query) {
-					$query->select(DB::raw(1))
-						->from('stock_transfer_unit as a')
-						->join('stock_transfer_approval as b', 'b.id', 'a.stock_transfer_id')
-						->whereRaw('a.recieved_unit_id = rud.id')
-						->whereRaw('b.status = 0');
-            });
+            return Datatables::of($stmt)
+                ->order(function ($q) {
+                    $q->orderByDesc('repo.id');
+                })
+                ->make(true);
 
-			if (Auth::user()->userrole != 'Warehouse Custodian') {
-				$stmt = $data->whereNotIn('repo.id', $list_id)->get();
-			} else {
-				$stmt = $data
-					->whereNotIn('repo.id', $list_id)
-					->where('repo.branch_id', Auth::user()->branch)->get();
-			}
-
-            $datatables = Datatables::of($stmt);
-
-            return $datatables->make(true);
 		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
+			return $this->sendError($th->getMessage());
 		}
 	}
 
 	public function getMissingDamageParts($received_id)
 	{
-
 		try {
-
 			return DB::table('recieve_unit_spare_parts as a')
 				->join('spare_parts as b', 'b.id', 'a.parts_id')
 				->select('b.*', 'a.price', 'a.id as received_ids')
@@ -128,43 +125,34 @@ class RequestRefurbishController extends BaseController
 	}
 
 	public function getPartsForRefurbish(Request $request)
-	{
+    {
+        try {
+            $receivedId = $request->received_id;
 
-		try {
-			// $get_spare_missing = DB::table('refurbish_details as a')
-			// 	->join('spare_parts as b', 'b.id', 'a.spare_parts')
-			// 	->select('b.*', 'a.price', 'a.actual_price', 'a.id as record_id', 'a.status')
-			// 	->where('a.refurbish_id', $received_id)->get();
-			// return $get_spare_missing;
+            $partsQuery = DB::table('recieve_unit_spare_parts as rsp')
+                ->leftJoin('spare_parts as sp', 'sp.id', '=', 'rsp.parts_id')
+                ->select(
+                    'sp.*',
+                    'rsp.price',
+                    'rsp.id as record_id',
+                    'rsp.actual_price',
+                    DB::raw("COALESCE(rsp.refurb_decision, '') AS status")
+                )
+                ->where('rsp.recieve_id', $receivedId)
+                ->where('rsp.is_deleted', 0);
 
-            $stmt = DB::table('recieve_unit_spare_parts as a')
-                ->leftjoin('spare_parts as b', 'b.id', 'a.parts_id')
-                ->select('b.*', 'a.price', 'a.id as record_id', 'a.actual_price', DB::raw("ISNULL(refurb_decision, '') AS status"))
-                ->where('a.recieve_id', '=', $request->received_id)
-                ->where('a.is_deleted', '=', '0');
+            // Only include parts that are not yet refurbished or not marked "done"
+            $partsQuery->where(function ($query) {
+                $query->whereNull('rsp.refurb_decision')
+                    ->orWhere('rsp.refurb_decision', '!=', 'done');
+            });
 
-            if($request->fetch_id == 0){
-                $stmt->where(function($query) {
-                    $query->whereNull('refurb_decision')
-                            ->orWhere('refurb_decision', '!=', 'done');
-                });
-            } else {
-                $stmt->where('refurb_id', '=', $request->fetch_id);
-            }
+            return $partsQuery->get();
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
 
-            return $stmt->get();
-
-			// return DB::table('recieve_unit_spare_parts as a')
-			// 	->join('spare_parts as b', 'b.id', 'a.parts_id')
-			// 	->select('b.*', 'a.price', 'a.id as record_id', 'a.actual_price', DB::raw("ISNULL(refurb_decision, '') AS status"))
-			// 	->where('recieve_id', $request->received_id)
-			// 	->where('is_deleted', '=', '0')
-            //     // ->whereNull('refurb_decision')->orWhere('refurb_decision', '!=', 'done')
-			// 	->get();
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
 
 	public function getRefurbishParts($repo_id)
 	{
@@ -276,10 +264,8 @@ class RequestRefurbishController extends BaseController
 
 			$spares = json_decode($request->spares, true);
 			foreach ($spares as $parts) {
-				// $update = refurbish_detail::where('id', $parts['parts_id'])->update(['status' => $parts['status']]);
 				DB::table("recieve_unit_spare_parts")
 					->where("id", '=', $parts['received_parts_id'])
-					// ->where("parts_id", '=',  $parts['parts_id'])
 					->update([
 						'actual_price' => $parts['actual_price'],
 						'refurb_decision' => $parts['status'],
@@ -305,102 +291,93 @@ class RequestRefurbishController extends BaseController
 
 	public function proceedRefurbish(Request $request)
 	{
+        $validator = Validator::make($request->all(), [
+            'refurbish_id' => 'required|numeric',
+            'spares'       => 'required|json',
+            'module_id'    => 'required|numeric',
+            'repo_id'      => 'required|numeric',
+        ]);
 
-		try {
-			$file_list = array();
-			$validator = Validator::make($request->all(), [
-				'refurbish_id' => 'required|numeric',
-				'spares' => 'required',
-			]);
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
+        }
 
-			if ($validator->fails()) {
-				return $this->sendError('Validation Error.', $validator->errors());
-			}
+        if ((int) $request->total_documents === 0) {
+            return $this->sendError('Validation Error.', 'Please upload some documents');
+        }
 
-			if ($request->total_documents == 0) {
-				return $this->sendError('Validation Error.', 'Please upload some documents');
-			}
+        return DB::transaction(function () use ($request) {
+            $fileList = [];
+            $folderPath = 'image/Refurbish/' . strtoupper(
+                $request->repo_id . '-' . $request->model_engine . '-' . $request->model_chassis
+            );
 
-			DB::beginTransaction();
+            $directory = public_path($folderPath);
+            if (!File::isDirectory($directory)) {
+                File::makeDirectory($directory, 0777, true, true);
+            }
 
-			$folder_path = 'image/Refurbish/' . strtoupper($request->repo_id . '-' . $request->model_engine . '-' . $request->model_chassis);
-			$directory = public_path($folder_path);
-			if (!File::isDirectory($directory)) {
-				File::makeDirectory($directory, 0777, true, true);
-			}
+            // Handle documents
+            for ($i = 0; $i < (int) $request->total_documents; $i++) {
+                $image = $request->file("related_documents_" . $i);
 
-			$input = $request->all();
+                if ($image) {
+                    $imageName = strtoupper(uniqid() . '-' . $image->getClientOriginalName());
+                    $image->move($directory, $imageName);
 
-			for ($i = 0; $i < $request->total_documents; $i++) {
+                    $fileList[] = [
+                        'filename' => $imageName,
+                        'path'     => $folderPath . '/' . $imageName,
+                    ];
+                }
+            }
 
-				$image = $request->file("related_documents_" . $i + 1);
-				if ($image) {
-					$image_name = strtoupper(uniqid() . '-' . $image->getClientOriginalName());
-					$image->move($directory, $image_name);
+            $refurbish = RefurbishProcess::create([
+                'refurbish_req_id' => $request->refurbish_id,
+                'maker'            => Auth::id(),
+                'files_names'      => json_encode($fileList),
+                're_class'         => $request->classification,
+            ]);
 
-					array_push($file_list, [
-						'filename' => $image_name,
-						'path' => $folder_path . '/' . $image_name
-					]);
-				}
-			}
+            // Update spares
+            $spares = json_decode($request->spares, true);
+            foreach ($spares as $parts) {
+                DB::table("recieve_unit_spare_parts")
+                    ->where("id", $parts['received_parts_id'])
+                    ->update([
+                        'actual_price'    => (double) $parts['actual_price'],
+                        'refurb_decision' => $parts['status'],
+                        'refurb_id'       => $parts['status'] === 'done' ? $request->refurbish_id : null,
+                    ]);
+            }
 
-			$refurbish = new refurbishProcess;
-			$refurbish->refurbish_req_id = $request->refurbish_id;
-			$refurbish->maker = Auth::user()->id;
-			$refurbish->files_names = json_encode($file_list);
-			$refurbish->re_class = $request->classification;
-			$refurbish->save();
+            $firstApproverId = $this->assignFirstApprover((int) $request->module_id);
 
-			$spares = json_decode($request->spares, true);
-			// return $spares;
-			foreach ($spares as $parts) {
-				// $update = refurbish_detail::where('id', $parts['parts_id'])->update(['status' => $parts['status'], 'actual_price' => $parts['actual_price']]);
-				DB::table("recieve_unit_spare_parts")
-					->where("id", '=', $parts['received_parts_id'])
-					// ->where("parts_id", '=',  $parts['parts_id'])
-					->update([
-						'actual_price' => (double) $parts['actual_price'],
-						'refurb_decision' => $parts['status'],
-						'refurb_id' => $parts['status'] == 'done' ? $request->refurbish_id : null ,
-					]);
-			}
+            if (!$firstApproverId) {
+                throw new \Exception("No approver found for this module.");
+            }
 
-			$matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $refurbish->id);
+            $refurbish->update([ 'approver' => $firstApproverId ]);
 
-			if ($matrix['status'] == 'error') {
-				return $matrix;
-			} else {
-				//update the first holder of the transaction
-				$save_holder = refurbishProcess::where('id', $refurbish->id)->update(['approver' => $matrix['message']]);
-				$update_head_table = request_refurbish::where('id', $request->refurbish_id)->update(['status' => '3']);
-			}
+            request_refurbish::where('id', $request->refurbish_id)->update(['status' => '3']);
 
-			DB::commit();
-
-			return $this->sendResponse($spares, 'Request refurbish approval save.');
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
+            return $this->sendResponse($spares, 'Request refurbish approval saved.');
+        });
 	}
 
 	public function cancelRefurbish(Request $request)
 	{
-
 		try {
+			DB::transaction(function () use ($request) {
+                // Delete refurbish parent
+                request_refurbish::where('id', $request->id)->delete();
 
-			DB::beginTransaction();
+                // Delete refurbish details
+                refurbish_detail::where('refurbish_id', $request->id)->delete();
 
-			$remove_parent = DB::table('request_refurbishes')->where('id', $request->id)->delete();
-			$remove_details = DB::table('refurbish_details')->where('refurbish_id', $request->id)->delete();
-
-			$ongoing_referbish = DB::table('refurbish_processes')->where('refurbish_req_id', $request->id)->count();
-
-			if ($ongoing_referbish > 0) {
-				$delete_process = DB::table('refurbish_processes')->where('refurbish_req_id', $request->id)->delete();
-			}
-
-			DB::commit();
+                // Delete refurbish processes
+                RefurbishProcess::where('refurbish_req_id', $request->id)->delete();
+            });
 
 			return $this->sendResponse([], 'Request successfully removed.');
 		} catch (\Throwable $th) {
@@ -409,208 +386,146 @@ class RequestRefurbishController extends BaseController
 	}
 
 	public function requestRefurbish(Request $request)
-	{
+    {
+        $validator = Validator::make($request->all(), [
+            'module_id' => 'required',
+            'repo_id'   => 'required',
+            'q1'        => 'required',
+            'q2'        => 'required',
+            'q3'        => 'required',
+        ]);
 
-		$file_list = array();
-		$validator = Validator::make($request->all(), [
-			'repo_id' => 'required|numeric',
-			'spares' => 'required',
-		]);
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
+        }
 
-		if ($validator->fails()) {
-			return $this->sendError('Validation Error.', $validator->errors());
-		}
+        // Require all 3 files
+        if (!$request->hasFile('q1') || !$request->hasFile('q2') || !$request->hasFile('q3')) {
+            return $this->sendError('Validation Error.', 'Please upload all 3 Quotations!');
+        }
 
-		if ($request->q1 == 'null' && $request->q2 == 'null' && $request->q3 == 'null') {
-			return $this->sendError('Validation Error.', 'Please upload atleast 1 Qoutation!');
-		}
+        return DB::transaction(function () use ($request) {
+            $folderPath = 'image/Qoutation';
+            $directory  = public_path($folderPath);
 
-		try {
-			DB::beginTransaction();
+            if (!File::isDirectory($directory)) {
+                File::makeDirectory($directory, 0777, true, true);
+            }
 
-			$folder_path = 'image/Qoutation';
-			$directory = public_path($folder_path);
-			if (!File::isDirectory($directory)) {
-				File::makeDirectory($directory, 0777, true, true);
-			}
+            // Process q1–q3 in a loop
+            $fileList = [];
+            foreach (['q1', 'q2', 'q3'] as $field) {
+                if ($request->hasFile($field)) {
+                    $file = $request->file($field);
+                    $filename = strtoupper(uniqid() . '-' . $file->getClientOriginalName());
+                    $file->move($directory, $filename);
 
-			if ($request->q1 != 'null') {
-				$image1 = $request->file("q1");
-				if ($image1) {
-					$image_name1 = strtoupper(uniqid() . '-' . $image1->getClientOriginalName());
-					$image1->move($directory, $image_name1);
+                    $fileList[] = [
+                        'filename' => $filename,
+                        'path'     => $folderPath . '/' . $filename,
+                    ];
+                }
+            }
 
-					array_push($file_list, [
-						'filename' => $image_name1,
-						'path' => $folder_path . '/' . $image_name1
-					]);
-				}
-			}
+            $refurbish = request_refurbish::create([
+                'repo_id'     => $request->repo_id,
+                'branch'      => Auth::user()->branch,
+                'maker'       => Auth::id(),
+                'files_names' => json_encode($fileList),
+            ]);
 
-			if ($request->q2 != 'null') {
-				$image1 = $request->file("q2");
-				if ($image1) {
-					$image_name1 = strtoupper(uniqid() . '-' . $image1->getClientOriginalName());
-					$image1->move($directory, $image_name1);
+            $firstApproverId = $this->assignFirstApprover((int) $request->module_id);
+            if (!$firstApproverId) {
+                throw new \Exception("No approver found for this module.");
+            }
 
-					array_push($file_list, [
-						'filename' => $image_name1,
-						'path' => $folder_path . '/' . $image_name1
-					]);
-				}
-			}
+            $refurbish->update(['approver' => $firstApproverId]);
 
-			if ($request->q3 != 'null') {
-				$image1 = $request->file("q3");
-				if ($image1) {
-					$image_name1 = strtoupper(uniqid() . '-' . $image1->getClientOriginalName());
-					$image1->move($directory, $image_name1);
+            return $this->sendResponse([], 'Request Refurbish Successfully Saved');
+        });
+    }
 
-					array_push($file_list, [
-						'filename' => $image_name1,
-						'path' => $folder_path . '/' . $image_name1
-					]);
-				}
-			}
+    public function updateRefurbish(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'repo_id' => 'required',
+            'spares'  => 'required',
+            'q1'      => 'required',
+            'q2'      => 'required',
+            'q3'      => 'required',
+        ]);
 
-			$refurbish = new request_refurbish;
-			$refurbish->repo_id = $request->repo_id;
-			$refurbish->branch = Auth::user()->branch;
-			$refurbish->maker = Auth::user()->id;
-			$refurbish->files_names = json_encode($file_list);
-			$refurbish->save();
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
+        }
 
-			$spares = json_decode($request->spares, true);
+        return DB::transaction(function () use ($request, $id) {
+            $folderPath = 'image/Qoutation';
+            $directory  = public_path($folderPath);
 
-			$matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $refurbish->id);
+            if (!File::isDirectory($directory)) {
+                File::makeDirectory($directory, 0777, true, true);
+            }
 
-			if ($matrix['status'] == 'error') {
-				return $matrix;
-			} else {
-				//update the first holder of the transaction
-				request_refurbish::where('id', $refurbish->id)->update(['approver' => $matrix['message']]);
-			}
+            $fileList = [];
+            foreach (['q1', 'q2', 'q3'] as $field) {
+                if ($request->hasFile($field)) {
+                    $file     = $request->file($field);
+                    $filename = strtoupper(uniqid() . '-' . $file->getClientOriginalName());
+                    $file->move($directory, $filename);
 
-			DB::commit();
+                    $fileList[] = [
+                        'filename' => $filename,
+                        'path'     => $folderPath . '/' . $filename,
+                    ];
+                }
+            }
 
-			return $this->sendResponse([], 'Request successfully save.');
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+            request_refurbish::where('id', $id)->update([
+                'files_names' => json_encode($fileList),
+                'status'      => '0',
+            ]);
 
-	public function updateRefurbish(Request $request, $id)
-	{
+            return $this->sendResponse([], 'Request Refurbish Successfully Updated');
+        });
+    }
 
-		$file_list = array();
-		$validator = Validator::make($request->all(), [
-			'repo_id' => 'required|numeric',
-			'spares' => 'required',
-		]);
-
-		if ($validator->fails()) {
-			return $this->sendError('Validation Error.', $validator->errors());
-		}
-
-		if ($request->q1 == 'null' && $request->q2 == 'null' && $request->q3 == 'null') {
-			return $this->sendError('Validation Error.', 'Please upload atleast 1 Qoutation!');
-		}
-
-		try {
-
-
-
-			DB::beginTransaction();
-
-			$folder_path = 'image/Qoutation';
-			$directory = public_path($folder_path);
-			if (!File::isDirectory($directory)) {
-				File::makeDirectory($directory, 0777, true, true);
-			}
-
-			if ($request->q1 != 'null') {
-				$image1 = $request->file("q1");
-				if ($image1) {
-					$image_name1 = strtoupper(uniqid() . '-' . $image1->getClientOriginalName());
-					$image1->move($directory, $image_name1);
-
-					array_push($file_list, [
-						'filename' => $image_name1,
-						'path' => $folder_path . '/' . $image_name1
-					]);
-				}
-			}
-
-			if ($request->q2 != 'null') {
-				$image1 = $request->file("q2");
-				if ($image1) {
-					$image_name1 = strtoupper(uniqid() . '-' . $image1->getClientOriginalName());
-					$image1->move($directory, $image_name1);
-
-					array_push($file_list, [
-						'filename' => $image_name1,
-						'path' => $folder_path . '/' . $image_name1
-					]);
-				}
-			}
-
-			if ($request->q3 != 'null') {
-				$image1 = $request->file("q3");
-				if ($image1) {
-					$image_name1 = strtoupper(uniqid() . '-' . $image1->getClientOriginalName());
-					$image1->move($directory, $image_name1);
-
-					array_push($file_list, [
-						'filename' => $image_name1,
-						'path' => $folder_path . '/' . $image_name1
-					]);
-				}
-			}
-
-			$update = request_refurbish::where('id', $id)->update(['files_names' => json_encode($file_list), 'status' => '0']);
-
-			DB::commit();
-
-			return $this->sendResponse([], 'Request successfully update.');
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
-
-	public function getListForApprovalRefurbish($moduleid)
+	public function getListForApprovalRefurbish($moduleId)
 	{
 		try {
-            $auth = Auth::user();
+            $authUser = Auth::user();
+
             $user = DB::table('users')
-                ->select(
-                    DB::raw("users.id AS user_id"),
-                    DB::raw("roles.id AS role_id")
-                )
-                ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
-                ->where('users.id', $auth->id)
+                ->select('users.id as user_id', 'roles.id as role_id')
+                ->join('user_role as roles', 'users.userrole', '=', 'roles.user_role_name')
+                ->where('users.id', $authUser->id)
                 ->first();
 
-            Log::info('User ID: ' . $user->user_id);
+            if (!$user) {
+                return $this->sendError('User role not found.');
+            }
 
             $cteQuery = $this->cteQuery();
 
-            // Determine user role (Approver or Maker)
-            $role = DB::select("
+            $roleResult = DB::select("
                 DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId;
                 {$cteQuery}
                 SELECT
                     CASE
-                        WHEN (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId) = 1
+                        WHEN (SELECT COUNT(DISTINCT approverId)
+                            FROM approvers
+                            WHERE module_id = @module
+                                AND approverId = @roleId) = 1
                         THEN 'Approver'
                         ELSE 'Maker'
-                    END AS roles
+                    END AS role_name
             ", [
-                'module' => $moduleid,
+                'module' => $moduleId,
                 'userId' => $user->user_id,
                 'roleId' => $user->role_id,
             ]);
 
-            $userRole = $role[0]->roles ?? 'Maker';
+            $userRole = $roleResult[0]->role_name ?? 'Maker';
 
 			// Build base query
             $query = DB::table('repo_details as repo')
@@ -623,7 +538,7 @@ class RequestRefurbishController extends BaseController
                 ->join('brands as brd', 'repo.brand_id', '=', 'brd.id')
                 ->join('unit_models as mdl', 'repo.model_id', '=', 'mdl.id')
                 ->join('unit_colors as color', 'repo.color_id', '=', 'color.id')
-                ->join('users as holder', 'refurbish.approver', '=', 'holder.id')
+                ->join('user_role as holder', 'refurbish.approver', '=', 'holder.id')
                 ->join('users as req', 'refurbish.maker', '=', 'req.id')
                 ->select(
                     'refurbish.id as refurbish_id',
@@ -641,10 +556,12 @@ class RequestRefurbishController extends BaseController
                             WHEN '0' THEN 'WAITING FOR APPROVAL'
                             WHEN '1' THEN 'APPROVED'
                             WHEN '2' THEN 'DISAPPROVED'
+                            WHEN '3' THEN 'Proceed to Settle Refurbishment'
+                            WHEN '4' THEN 'Done'
                         END AS status
                     "),
                     'refurbish.remarks',
-                    DB::raw("CONCAT(holder.firstname, ' ', holder.middlename, ' ', holder.lastname) as current_holder"),
+                    DB::raw("holder.user_role_name as current_holder"),
                     DB::raw("CONCAT(req.firstname, ' ', req.middlename, ' ', req.lastname) as requestor")
                 )
                 ->where('rud.status', '!=', 4)
@@ -653,7 +570,7 @@ class RequestRefurbishController extends BaseController
             // Apply role-based filters
             if ($userRole === 'Approver') {
                 $query->where('refurbish.status', '0')
-                    ->whereIn('refurbish.approver', [$user->user_id, $user->role_id]);
+                    ->whereIn('refurbish.approver', [$user->role_id]);
                 Log::info('Filter applied for Approver.');
             } else {
                 $check = DB::table('request_refurbishes')
@@ -669,7 +586,11 @@ class RequestRefurbishController extends BaseController
                 }
             }
 
-            return Datatables::of($query)->make(true);
+            return Datatables::of($query)
+                ->order(function ($q) {
+                    $q->orderByDesc('refurbish.id');
+                })
+                ->make(true);
 
         } catch (\Throwable $th) {
             Log::error('Error in getListForApprovalRefurbish: ' . $th->getMessage());
@@ -731,7 +652,7 @@ class RequestRefurbishController extends BaseController
                         ELSE 'Subject For Refurbishing'
                     END as status,
                     process.remarks,
-                    CONCAT(holder.firstname, holder.middlename, holder.lastname) as current_holder,
+                    holder.user_role_name as current_holder,
                     CONCAT(req.firstname, req.middlename, req.lastname) as requestor,
                     UPPER(CASE
                         WHEN defineClass.class_percent <= 5 THEN 'A'
@@ -750,7 +671,7 @@ class RequestRefurbishController extends BaseController
                 INNER JOIN unit_models as mdl ON repo.model_id = mdl.id
                 INNER JOIN unit_colors as color ON repo.color_id = color.id
                 LEFT JOIN refurbish_processes as process ON process.refurbish_req_id = refurbish.id
-                LEFT JOIN users as holder ON process.approver = holder.id
+                LEFT JOIN user_role as holder ON process.approver = holder.id
                 LEFT JOIN users as req ON process.maker = req.id
                 LEFT JOIN defineClassification defineClass ON repo.id = defineClass.repo_id
                 WHERE (
@@ -775,81 +696,86 @@ class RequestRefurbishController extends BaseController
 
 	public function refurbishDecision(Request $request)
     {
-        $authUser = Auth::user();
-
-        $validator = Validator::make($request->all(), [
-            'data_id'   => 'required|integer',
-            'remarks'   => 'required|string',
-            'status'    => 'required', // 1 = Approve, 2 = Disapprove
-            'module_id' => 'required|integer',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
-        }
-
-        DB::beginTransaction();
-
         try {
-            // Get role and user ID
-            $user = DB::table('users')
-                ->select('users.id AS user_id', 'roles.id AS role_id')
-                ->join('user_role as roles', 'users.userrole', '=', 'roles.user_role_name')
-                ->where('users.id', $authUser->id)
-                ->first();
+            $validator = Validator::make($request->all(), [
+                'data_id'        => 'required|numeric',
+                'status'    => 'required|numeric', // 1 = Approve, 2 = Disapprove
+                'module_id' => 'required|numeric',
+                'remarks'   => 'nullable|string',
+            ]);
 
-            // Fetch refurbish request
-            $refurbish = request_refurbish::findOrFail($request->data_id);
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
 
+            $userId   = Auth::id();
+            $roleId   = user_role::where('user_role_name', Auth::user()->userrole)->value('id');
+            $moduleId = $request->module_id;
+            $recordId = $request->data_id;
+
+            // ✅ check if already approved
+            $check = $this->checkIfApproved($moduleId, $recordId, $roleId);
+            if ($check['status']) {
+                $approverName = $check['name'] ?? 'Unknown Approver';
+                return $this->sendError(
+                    "This request has already been approved by {$approverName}.",
+                    ['approver' => $check['approver']]
+                );
+            }
+
+            DB::beginTransaction();
+
+            $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
             $nextApproverId = null;
-            $currentApproverId = $user->role_id;
 
-            // Handle approval logic
-            if ((int) $request->status === 1) {
-                $nextSequence = $this->approverDecision($request->module_id, $refurbish->id, $authUser->id);
+            // ✅ Approval flow
+            if ($request->status == 1) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'A');
 
-                // If no further approvers, mark as "Approved by All"
-                if ($nextSequence === 0) {
-                    $refurbish->status = 3;
+                $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
+
+                if ($nextApprover) {
+                    $nextApproverId = $nextApprover->approverId;
+                } else {
+                    // No more approvers -> mark refurbish as fully approved
+                    request_refurbish::where('id', $recordId)
+                        ->update(['status' => 3]);
+
+                    refurbish_detail::where('refurbish_id', $recordId)->delete();
                 }
-
-                $currentApproverId = $nextSequence === 0 ? $user->role_id : $nextSequence;
             }
 
-            // Handle disapproval logic
-            if ((int) $request->status === 2) {
-                $firstApprover = $this->disapprovedDecision($request->module_id, $refurbish->id, $authUser->id);
-                $refurbish->status = 2;
-                $currentApproverId = $firstApprover;
+            // ✅ Disapproval flow
+            if ($request->status == 2) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, null);
+
+                request_refurbish::where('id', $recordId)->update([
+                    'status'   => 2,
+                    'approver' => $roleId,
+                ]);
+
+                refurbish_detail::where('refurbish_id', $recordId)->delete();
             }
 
-            // Update refurbish request
-            $refurbish->approver = $currentApproverId;
-            $refurbish->date_approved = (int) $request->status === 1 ? Carbon::now() : null;
-            $refurbish->remarks = $request->remarks;
-            $refurbish->save();
-
-            // Remove related refurbish detail records
-            refurbish_detail::where('refurbish_id', $refurbish->id)->delete();
+            // ✅ Always update approver, remarks, and approval date
+            request_refurbish::where('id', $recordId)->update([
+                'approver'      => $nextApproverId ?? $roleId,
+                'date_approved' => now(),
+                'remarks'       => $request->remarks,
+            ]);
 
             DB::commit();
 
-            return $this->sendResponse([], (int) $request->status === 1
-                ? 'Request for refurbish approval successfully approved!'
-                : 'Request for refurbish approval successfully disapproved!'
+            return $this->sendResponse([],
+                $request->status == 1
+                    ? 'Request for refurbish successfully approved!'
+                    : 'Request for refurbish successfully disapproved!'
             );
 
         } catch (\Throwable $th) {
             DB::rollBack();
-
-            // Attempt to roll back approval routing (if method is defined)
-            try {
-                $this->rollBaclDecision($request->module_id, $request->data_id, $authUser->id);
-            } catch (\Throwable $e) {
-                // Log rollback failure if needed
-            }
-
-            return $this->sendError($th->getMessage() ?? 'An error occurred while processing your request.');
+            $this->rollBaclDecision($request->module_id, $request->id, $roleId ?? null);
+            return $this->sendError($th->getMessage());
         }
     }
 
@@ -872,88 +798,90 @@ class RequestRefurbishController extends BaseController
 
 	public function refurbishProcessDecision(Request $request)
 	{
-		$validator = Validator::make($request->all(), [
-            'data_id'   => 'required|integer',
-            'remarks'   => 'required|string',
-            'status'    => 'required|in:1,2', // 1 - Approve, 2 - Disapprove
-            'repo_id'   => 'required|integer',
-            'module_id' => 'required|integer',
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
-        }
-
-        DB::beginTransaction();
-
         try {
-            $authUserId = Auth::id();
-            $user = DB::table('users')
-                ->select(
-                    DB::raw("users.id AS user_id"),
-                    DB::raw("roles.id AS role_id")
-                )
-                ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
-                ->where('users.id', $authUserId)
-                ->first();
+            $validator = Validator::make($request->all(), [
+                'data_id'   => 'required|numeric',
+                'status'    => 'required|in:1,2', // 1 - Approve, 2 - Disapprove
+                'module_id' => 'required|numeric',
+                'remarks'   => 'nullable|string',
+                'repo_id'   => 'required|numeric',
+            ]);
 
-            // Fetch refurbish process
-            $process = refurbishProcess::find($request->data_id);
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $userId   = Auth::id();
+            $roleId   = user_role::where('user_role_name', Auth::user()->userrole)->value('id');
+            $moduleId = $request->module_id;
+            $recordId = $request->data_id;
+
+            $check = $this->checkIfApproved($moduleId, $recordId, $roleId);
+            if ($check['status']) {
+                $approverName = $check['name'] ?? 'Unknown Approver';
+                return $this->sendError(
+                    "This refurbish request has already been approved by {$approverName}.",
+                    ['approver' => $check['approver']]
+                );
+            }
+
+            DB::beginTransaction();
+
+            $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
+            $nextApproverId  = null;
+
+            $process = RefurbishProcess::find($recordId);
+
             if (!$process) {
                 return $this->sendError('Refurbish process not found.');
             }
 
-            $nextApproverId = 0;
+            if ($request->status == 1) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'A');
 
-            // === APPROVAL FLOW ===
-            if ((int) $request->status === 1) {
-                $sequenceApprover = $this->approverDecision($request->module_id, $process->id, $authUserId);
+                $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
 
-                if ($sequenceApprover === 0) {
-                    // Final approver: update status
+                if ($nextApprover) {
+                    $nextApproverId = $nextApprover->approverId;
+                } else {
+                    // No more approvers, mark refurbish process & request as approved
                     $process->update(['status' => 1]);
 
-                    // Update refurbish request status to 'Completed'
-                    DB::table('request_refurbishes')->where('id', $process->refurbish_req_id)
-                        ->update(['status' => 4]);
-
-                    $nextApproverId = $user->role_id;
-                } else {
-                    // Set next approver in the sequence
-                    $nextApproverId = $sequenceApprover;
+                    request_refurbish::where('id', $process->refurbish_req_id)
+                        ->update(['status' => 4]); // Completed
                 }
             }
 
-            // === DISAPPROVAL FLOW ===
-            elseif ((int) $request->status === 2) {
-                $firstApproverId = $this->disapprovedDecision($request->module_id, $process->id, $authUserId);
+            if ($request->status == 2) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, null);
 
                 $process->update([
                     'status'   => 2,
-                    'approver' => $firstApproverId
+                    'approver' => $roleId,
                 ]);
 
-                $nextApproverId = $firstApproverId;
+                request_refurbish::where('id', $process->refurbish_req_id)
+                    ->update(['status' => 2]); // Disapproved
             }
 
-            // === UPDATE REMARKS & APPROVER ===
             $process->update([
-                'approver'   => $nextApproverId,
-                'remarks'    => $request->remarks,
-                'updated_at' => now(),
+                'approver'     => $nextApproverId ?? $roleId,
+                'remarks'      => $request->remarks,
+                'date_approved'=> now(),
             ]);
 
             DB::commit();
 
-			return $this->sendResponse([], (int) $request->status == 1
-                ? 'Request for refurbish process successfully approved!'
-                : 'Request for refurbish process successfully disapproved!'
+            return $this->sendResponse([],
+                $request->status == 1
+                    ? 'Refurbish process successfully approved!'
+                    : 'Refurbish process successfully disapproved!'
             );
 		} catch (\Throwable $th) {
             DB::rollBack();
-			$this->rollBaclDecision($request->module_id, $request->data_id, Auth::user()->id);
-			return $this->sendError($th->errorInfo[2]);
-		}
+            $this->rollBaclDecision($request->module_id, $request->id, Auth::user()->id);
+            return $this->sendError($th->getMessage());
+        }
 	}
 
 	public function refurbishUnitList(Request $request)

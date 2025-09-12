@@ -9,7 +9,7 @@ class appraisal_history extends Model
 {
     use HasFactory;
 
-    protected $table = 'appraisal_history';
+    protected $table = 'appraisal_histories';
 
     protected $fillable = [
         'appraisal_req_id',

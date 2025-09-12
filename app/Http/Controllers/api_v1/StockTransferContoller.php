@@ -268,7 +268,6 @@ class StockTransferContoller extends BaseController
             DB::beginTransaction();
 
             $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
-
             $nextApproverId = null;
 
             // ✅ Approval flow
@@ -301,7 +300,7 @@ class StockTransferContoller extends BaseController
             }
 
             if ($request->status == 2) {
-                $this->logApproval($moduleId, $recordId, $userId, $roleId, 1, null);
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, null);
 
                 stock_transfer::where('id', $recordId)->update([
                     'status'   => 2,

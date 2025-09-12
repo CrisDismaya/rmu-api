@@ -218,7 +218,7 @@ class UserController extends BaseController
             }
 
             $existingApprovers = approval_matrix_setting::where('module_id', $moduleId)->get();
-            $level = count($existingApprovers);
+            $level = $existingApprovers->max('level');
 
             foreach ($request->data as $input) {
                 $validator = Validator::make($input, [

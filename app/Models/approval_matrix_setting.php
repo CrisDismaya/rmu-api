@@ -9,6 +9,8 @@ class approval_matrix_setting extends Model
 {
     use HasFactory;
 
+    protected $table = 'approval_matrix_settings';
+
     protected $fillable = [
         'module_id',
         'level',
