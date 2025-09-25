@@ -70,6 +70,7 @@ class RepoController extends BaseController
 				'spare_parts_id_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_status_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_price_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_proof_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_remarks_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_count' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 			]);
@@ -145,11 +146,12 @@ class RepoController extends BaseController
 							'path' => $path . '/' . $image_name,
 						];
 
+
 						FilesUploaded::create($image_format);
 					}
 				}
 
-				$receive_format = [
+				$receive_unit = receive_unit::create([
 					'branch' => Auth::user()->branch,
 					'repo_id' => $latestInsertedId,
 					'unit_price' => $request->original_srp,
@@ -159,23 +161,41 @@ class RepoController extends BaseController
 					'is_certified_no_parts' => $request->certify_no_missing_and_damaged_parts,
 					'original_owner' => $request->original_owner,
 					'original_owner_id' => $request->original_owner_id,
-				];
-
-				$receive_unit = receive_unit::create($receive_format);
+				]);
 				$receive_latestInsertedId = $receive_unit->id;
 
-				for ($i = 1; $i <= $request->spare_parts_count; $i++) {
-					if ($request->input("spare_parts_id_{$i}")) {
-						$spare_parts_format = [
-							'recieve_id' => $receive_latestInsertedId,
-							'parts_id' => $request->input("spare_parts_id_{$i}"),
-							'parts_status' => $request->input("spare_parts_status_{$i}"),
-							'price' => $request->input("spare_parts_price_{$i}"),
-							'parts_remarks' => $request->input("spare_parts_remarks_{$i}")
-						];
-						unit_spare_parts::create($spare_parts_format);
-					}
-				}
+                $isCertified = filter_var($receive_unit->is_certified_no_parts, FILTER_VALIDATE_BOOLEAN);
+                if(! $isCertified) {
+                    $md_path  = $path . '/missing_and_damages';
+                    $md_directory  = public_path($md_path);
+
+                    if (!File::isDirectory($md_directory)) {
+                        File::makeDirectory($md_directory, 0777, true, true);
+                    }
+
+                    for ($i = 1; $i <= $request->spare_parts_count; $i++) {
+                        $filePath = null;
+
+                        if ($request->hasFile("spare_parts_proof_{$i}")) {
+                            $image = $request->file("spare_parts_proof_{$i}");
+                            $image_name = strtoupper(uniqid()) . '.' . $image->getClientOriginalExtension();
+                            $image->move($md_directory, $image_name);
+                            $filePath = $md_path . '/' . $image_name;
+                        }
+
+                        if ($request->input("spare_parts_id_{$i}")) {
+                            $spare_parts_format = [
+                                'recieve_id' => $receive_latestInsertedId,
+                                'parts_id' => $request->input("spare_parts_id_{$i}"),
+                                'parts_status' => $request->input("spare_parts_status_{$i}"),
+                                'price' => $request->input("spare_parts_price_{$i}"),
+                                'dir_image' => $filePath,
+                                'parts_remarks' => $request->input("spare_parts_remarks_{$i}")
+                            ];
+                            unit_spare_parts::create($spare_parts_format);
+                        }
+                    }
+                }
 
 				$module = DB::table('system_menu')->where('file_path', '=', 'repo_tagging_approval.php')->first();
 				$matrix =  $this->ApprovalMatrixActivityLog($module->id, $receive_latestInsertedId);
@@ -536,6 +556,7 @@ class RepoController extends BaseController
 				'spare_parts_id_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_status_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_price_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
+				'spare_parts_proof_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_remarks_*' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 				'spare_parts_count' => ($request->certify_no_missing_and_damaged_parts == 'true' ? 'required' : 'nullable'),
 			]);
@@ -543,19 +564,6 @@ class RepoController extends BaseController
 			if ($validator->fails()) {
 				return $this->sendError('Validation Error.', $validator->errors());
 			}
-
-			$checker = 	DB::table('repo_details as rep')
-				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
-				->whereRaw('UPPER(rep.model_engine) = UPPER(?)', [$request->model_engine])
-				->whereRaw('UPPER(rep.model_chassis) = UPPER(?)', [$request->model_chassis])
-				->groupBy('rud.is_sold')
-				->select(DB::raw('count(rep.id) as isExist'), 'rud.is_sold')
-				->first();
-
-			// if (!empty($checker) && $checker->isExist > 0 && $checker->is_sold == 'N') {
-			// 	return $this->sendError([], 'The existing Unit is not been sold');
-			// }
-			// else {
 
 				$repo_format = [
 					'customer_acumatica_id' => $request->customer_acumatica_id,
@@ -593,7 +601,7 @@ class RepoController extends BaseController
 					File::makeDirectory($directory, 0777, true, true);
 				}
 
-				$maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $id)->first();
+				$maxid = receive_unit::where('repo_id', '=', $id)->first();
 
 				for ($i = 1; $i <= $request->append_count; $i++) {
 					$image = $request->file("image_{$i}");
@@ -624,25 +632,45 @@ class RepoController extends BaseController
 					'original_owner_id' => $request->original_owner_id,
 				];
 
-				DB::table('recieve_unit_details')->where('id', $maxid->id)->update($receive_format);
+				$maxid->update($receive_format);
 
-				for ($i = 1; $i <= $request->spare_parts_count; $i++) {
-					if ($request->input("spare_parts_id_{$i}")) {
-						$spare_parts_format = [
-							'recieve_id' => $maxid->id,
-							'parts_id' => $request->input("spare_parts_id_{$i}"),
-							'parts_status' => $request->input("spare_parts_status_{$i}"),
-							'price' => $request->input("spare_parts_price_{$i}"),
-							'parts_remarks' => $request->input("spare_parts_remarks_{$i}")
-						];
+                $isCertified = filter_var($maxid->is_certified_no_parts, FILTER_VALIDATE_BOOLEAN);
+                if(! $isCertified) {
+                    $md_path  = $path . '/missing_and_damages';
+                    $md_directory  = public_path($md_path);
 
-						if ($request->input("parts_unique_id_{$i}") == 0) {
-							unit_spare_parts::create($spare_parts_format);
-						} else {
-							unit_spare_parts::where('id', $request->input("parts_unique_id_{$i}"))->update($spare_parts_format);
-						}
-					}
-				}
+                    if (!File::isDirectory($md_directory)) {
+                        File::makeDirectory($md_directory, 0777, true, true);
+                    }
+
+                    for ($i = 1; $i <= $request->spare_parts_count; $i++) {
+                        $filePath = null;
+
+                        if ($request->hasFile("spare_parts_proof_{$i}")) {
+                            $image = $request->file("spare_parts_proof_{$i}");
+                            $image_name = strtoupper(uniqid()) . '.' . $image->getClientOriginalExtension();
+                            $image->move($md_directory, $image_name);
+                            $filePath = $md_path . '/' . $image_name;
+                        }
+
+                        if ($request->input("spare_parts_id_{$i}")) {
+                            $spare_parts_format = [
+                                'recieve_id' => $maxid->id,
+                                'parts_id' => $request->input("spare_parts_id_{$i}"),
+                                'parts_status' => $request->input("spare_parts_status_{$i}"),
+                                'price' => $request->input("spare_parts_price_{$i}"),
+                                'dir_image' => $filePath,
+                                'parts_remarks' => $request->input("spare_parts_remarks_{$i}")
+                            ];
+
+                            if ($request->input("parts_unique_id_{$i}") == 0) {
+                                unit_spare_parts::create($spare_parts_format);
+                            } else {
+                                unit_spare_parts::where('id', $request->input("parts_unique_id_{$i}"))->update($spare_parts_format);
+                            }
+                        }
+                    }
+                }
 				DB::commit();
 			// }
 			return $this->sendResponse([], 'REPO Ddetails update successfully.');

@@ -87,7 +87,7 @@ class StockTransferContoller extends BaseController
 					AND (app.approvalstatus IS NULL OR app.approvalstatus IN (1, 2))
 					AND (sld.id IS NULL OR sld.status IN (2))
 					AND (ref.id IS NULL OR ref.status IN (2, 3, 4))
-					AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+					AND ISNULL(files.total_upload_required_files, 0) >= (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
                     ORDER BY rep.created_at DESC
 				",
 				array(Auth::user()->branch)

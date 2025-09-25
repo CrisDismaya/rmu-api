@@ -69,7 +69,7 @@ class RequestRefurbishController extends BaseController
 				)
 				->where('rud.status', '!=', '4')
 				->where('rud.is_sold', '=', 'N')
-				->whereRaw('ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)')
+				->whereRaw('ISNULL(files.total_upload_required_files, 0) >= (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)')
 				->whereRaw('ISNULL((SELECT COUNT(*) FROM recieve_unit_spare_parts WHERE recieve_id = 1 AND is_deleted = 0 AND refurb_id IS NULL), 0) > 0')
 				->whereNotExists(function ($query) {
 					$query->select(DB::raw(1))
