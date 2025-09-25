@@ -134,7 +134,7 @@ class RequestApprovalController extends BaseController
                     GROUP BY rud.repo_id
                 ) AS parts ON parts.repo_id = repo.id
                 WHERE received.is_sold = 'N' AND received.status != 4
-                    AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+                    AND ISNULL(files.total_upload_required_files, 0) >= (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
                     AND NOT EXISTS (
                         SELECT 1
                         FROM request_approvals

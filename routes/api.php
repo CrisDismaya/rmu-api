@@ -165,7 +165,6 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::post('refurbishProcessDecision', [RequestRefurbishController::class, 'refurbishProcessDecision']);
 			Route::get('settledRefurbishAccounting', [RequestRefurbishController::class, 'settledRefurbishAccounting']);
 
-
 			// stock transfer
 			Route::get('modelList', [StockTransferContoller::class, 'ModelList']);
 			Route::get('branchesList', [StockTransferContoller::class, 'branchesList']);
