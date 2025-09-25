@@ -68,7 +68,22 @@ trait TransactionNumberGenerator {
 
     public static function forInventoryInCount(): int
     {
-        $count = DB::table('repo_details')->whereNotNull('transaction_number_inventory_in')->count();
+        $stockTransfers = DB::table('stock_transfer_approval as sta')
+            ->join('stock_transfer_unit as stu', 'sta.id', '=', 'stu.stock_transfer_id')
+            ->where('sta.status', 1)
+            ->selectRaw("'stock_transfer' AS module, stu.id, sta.updated_at AS date");
+
+        $soldUnits = DB::table('sold_units')
+            ->where('status', 1)
+            ->selectRaw("'sold_unit' AS module, id, updated_at AS date");
+
+        $count = DB::query()
+            ->fromSub(
+                $stockTransfers->unionAll($soldUnits),
+                'InventoryOut_Temp'
+            )
+            ->count();
+
         return (int) $count + 1;
     }
 

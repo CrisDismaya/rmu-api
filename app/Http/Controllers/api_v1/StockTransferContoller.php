@@ -391,9 +391,11 @@ class StockTransferContoller extends BaseController
                 'is_use_old_files' => $request->decisionid,
                 'trans_no_received' => $this->generateTransactionNumber('receive_transfer', null, now()),
                 'received_at' => Carbon::now(),
+                'transaction_number_inventory_in' => $this->generateTransactionNumber('inventory_in', null, now()),
+                'inventory_in_at' => Carbon::now(),
             ]);
-			repo::where('id', '=', $repo->id)->update(['branch_id' => Auth::user()->branch, 'transfer_branch_id' => $request->unitid]);
-			receive_unit::where('id', '=', $receive->id)->update(['branch' => Auth::user()->branch, 'status' => '0']);
+			$repo->update(['branch_id' => Auth::user()->branch, 'transfer_branch_id' => $request->unitid]);
+			$receive->update(['branch' => Auth::user()->branch, 'status' => '0']);
 
 			// 1 = Use Previous Images / 2 = Upload New Images
 			foreach ($pictures as $pics) {

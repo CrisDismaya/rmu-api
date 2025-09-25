@@ -47,15 +47,40 @@ class BackfillTransactionNumbers extends Command
 
     private function backfillInventoryIn()
     {
-        $repos = DB::table('repo_details')->orderBy('created_at')->get();
+        $stockTransfers = DB::table('stock_transfer_approval as sta')
+            ->join('stock_transfer_unit as stu', 'sta.id', '=', 'stu.stock_transfer_id')
+            ->where('sta.status', 1)
+            ->where('stu.is_received', 1)
+            ->selectRaw("'stock_transfer' AS module, stu.id, sta.updated_at AS date");
 
-        foreach ($repos as $index => $repo) {
+        $repos = DB::table('repo_details')
+            ->selectRaw("'repo' AS module, id, created_at");
+
+        $records = DB::query()
+            ->fromSub(
+                $stockTransfers->unionAll($repos),
+                'InventoryIn_Temp'
+            )
+            ->orderBy('date')
+            ->get();
+
+        foreach ($records as $index => $record) {
             $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('inventory_in', $rowNumber, $repo->created_at);
+            $transactionNumber = $this->generateTransactionNumber('inventory_in', $rowNumber, $record->date);
 
-            DB::table('repo_details')
-                ->where('id', $repo->id)
-                ->update(['transaction_number_inventory_in' => $transactionNumber]);
+            $updateData = [
+                'transaction_number_inventory_in' => $transactionNumber,
+            ];
+
+            if ($record->module === 'stock_transfer') {
+                $updateData['inventory_in_at'] = now();
+            }
+
+            $table = $record->module === 'stock_transfer' ? 'stock_transfer_unit' : 'repo_details';
+
+            DB::table($table)
+                ->where('id', $record->id)
+                ->update($updateData);
         }
     }
 
@@ -142,37 +167,36 @@ class BackfillTransactionNumbers extends Command
 
     private function backfillInventoryOut()
     {
-
         $stockTransfers = DB::table('stock_transfer_approval as sta')
             ->join('stock_transfer_unit as stu', 'sta.id', '=', 'stu.stock_transfer_id')
             ->where('sta.status', 1)
-            ->selectRaw("'stock_transfer' AS module, stu.id, sta.updated_at");
+            ->selectRaw("'stock_transfer' AS module, stu.id, sta.updated_at AS date");
 
         $soldUnits = DB::table('sold_units')
             ->where('status', 1)
             ->selectRaw("'sold_unit' AS module, id, updated_at");
 
-        $InventoryOut_Temp = DB::query()
+        $records = DB::query()
             ->fromSub(
                 $stockTransfers->unionAll($soldUnits),
                 'InventoryOut_Temp'
             )
-            ->orderBy('updated_at')
+            ->orderBy('date')
             ->get();
 
-        foreach ($InventoryOut_Temp as $index => $out) {
+        foreach ($records as $index => $record) {
             $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, $out->updated_at);
+            $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, $record->date);
 
             $updateData = [
                 'transaction_number_inventory_out' => $transactionNumber,
                 'inventory_out_at' => now(),
             ];
 
-            $table = $out->module === 'stock_transfer' ? 'stock_transfer_unit' : 'sold_units';
+            $table = $record->module === 'stock_transfer' ? 'stock_transfer_unit' : 'sold_units';
 
             DB::table($table)
-                ->where('id', $out->id)
+                ->where('id', $record->id)
                 ->update($updateData);
         }
     }
