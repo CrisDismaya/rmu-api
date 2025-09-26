@@ -122,7 +122,7 @@ class RepoController extends BaseController
 				$latestInsertedId = $repo->id;
 
 				$repo->msuisva_form_no = date("Y")."-".str_pad($latestInsertedId, (strlen($latestInsertedId) > 5 ? strlen($latestInsertedId) + 1 : 5), '0', STR_PAD_LEFT);
-                $repo->transaction_number_inventory_in = $this->generateTransactionNumber('inventory_in', null, $repo->craeted_at);
+                $repo->transaction_number_inventory_in = $this->generateTransactionNumber('inventory_in', $repo->craeted_at);
                 $repo->save();
 
 				$path = 'image/unit_received/' . strtoupper($request->model_engine . '-' . $request->model_chassis);
@@ -228,6 +228,10 @@ class RepoController extends BaseController
                 {$cteQuery}
 
                 SELECT
+                    CASE
+                        WHEN transfer.transaction_number_inventory_in IS NOT NULL THEN transfer.transaction_number_inventory_in
+                        ELSE rep.transaction_number_inventory_in
+                    END AS inventory_in,
                     rep.*,
                     cus.acumatica_id,
                     CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name,
@@ -317,7 +321,7 @@ class RepoController extends BaseController
                             WHEN sta1.status = 2 THEN sta1.from_branch
                         END AS current_branch,
                         stu1.is_received AS isreceived, stu1.is_use_old_files,
-                        rud1.repo_id AS repoid, sub.unitid
+                        rud1.repo_id AS repoid, sub.unitid, stu1.transaction_number_inventory_in
                     FROM (
                         SELECT MAX(sta.id) AS approvalid,
                             MAX(stu.recieved_unit_id) AS recievedid,

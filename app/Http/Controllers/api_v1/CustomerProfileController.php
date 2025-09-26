@@ -18,7 +18,6 @@ class CustomerProfileController extends BaseController
 
     function createCustomerProfile(Request $request)
     {
-
         try {
             $validator = Validator::make($request->all(), [
                 'acumatica_id' => 'nullable',
@@ -75,7 +74,7 @@ class CustomerProfileController extends BaseController
                     'alternative_id_no' => $request->alternative_id_no,
                 ]);
 
-                $transactionNo = $this->generateTransactionNumber('customer', null, $customer->created_at);
+                $transactionNo = $this->generateTransactionNumber('customer', $customer->created_at);
 
                 $customer->acumatica_id = $transactionNo;
                 $customer->save();

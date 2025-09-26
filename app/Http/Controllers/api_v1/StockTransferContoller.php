@@ -198,7 +198,7 @@ class StockTransferContoller extends BaseController
 			$stock = stock_transfer::create($stock_format);
 			$rec_id = $stock->id;
 
-            $transactionNumber = $this->generateTransactionNumber('stock_transfer', null, $stock->created_at);
+            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $stock->created_at);
 
 			stock_transfer::where('id', $rec_id)->update(['reference_code' => $transactionNumber]);
 
@@ -251,10 +251,8 @@ class StockTransferContoller extends BaseController
 					stock_transfer::where('id', $request->id)->update(['status' => $request->status]);
 
                     $units  = stock_transfer_units::where('stock_transfer_id', $request->id)->get();
-                    $startCount = $this->forInventoryOutCount();
-                    foreach ($units as $index => $unit) {
-                        $rowNumber = $startCount + $index;
-                        $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, now());
+                    foreach ($units as $unit) {
+                        $transactionNumber = $this->generateTransactionNumber('inventory_out', now());
 
                         $unit->update([
                             'transaction_number_inventory_out' => $transactionNumber,
@@ -389,9 +387,9 @@ class StockTransferContoller extends BaseController
 			stock_transfer_units::where('id', '=', $request->unitid)->update([
                 'is_received' => '1',
                 'is_use_old_files' => $request->decisionid,
-                'trans_no_received' => $this->generateTransactionNumber('receive_transfer', null, now()),
+                'trans_no_received' => $this->generateTransactionNumber('receive_transfer', now()),
                 'received_at' => Carbon::now(),
-                'transaction_number_inventory_in' => $this->generateTransactionNumber('inventory_in', null, now()),
+                'transaction_number_inventory_in' => $this->generateTransactionNumber('inventory_in', now()),
                 'inventory_in_at' => Carbon::now(),
             ]);
 			$repo->update(['branch_id' => Auth::user()->branch, 'transfer_branch_id' => $request->unitid]);

@@ -11,13 +11,13 @@ trait TransactionNumberGenerator {
 
     const DEFAULT_LENGTH = 5;
     const DEFAULT_PREFIX = [
-        'customer' => 'B',
-        'inventory_in' => 'RI',
-        'inventory_out' => 'RO',
-        'stock_transfer' => 'ST',
+        'customer'         => 'B',
+        'inventory_in'     => 'RI',
+        'inventory_out'    => 'RO',
+        'stock_transfer'   => 'ST',
         'receive_transfer' => 'RT',
-        'sales' => 'RS',
-        'rdaf' => 'RDAF',
+        'sales'            => 'RS',
+        'rdaf'             => 'RDAF',
     ];
 
     private function getPrefix(string $type): string
@@ -45,11 +45,49 @@ trait TransactionNumberGenerator {
         return Carbon::parse($date)->format('Y');
     }
 
-    public function generateTransactionNumber(string $type, ?int $incrementID, $date = null): string
+     /**
+     * Fetch and increment the next sequence number for a type
+     */
+    private function getNextSequence(string $type): int
     {
-        $prefix = $this->getPrefix($type);
-        $counter = $incrementID ?? $this->getTypeCount($type);
-        $year = $this->getYear($date);
+        return DB::transaction(function () use ($type) {
+            $row = DB::table('transaction_sequences')
+                ->where('type', $type)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$row) {
+                // Initialize if missing
+                DB::table('transaction_sequences')->insert([
+                    'type'           => $type,
+                    'current_number' => 1,
+                    'created_at'     => now(),
+                    'updated_at'     => now(),
+                ]);
+                return 1;
+            }
+
+            $next = $row->current_number + 1;
+
+            DB::table('transaction_sequences')
+                ->where('type', $type)
+                ->update([
+                    'current_number' => $next,
+                    'updated_at'     => now(),
+                ]);
+
+            return $next;
+        });
+    }
+
+    /**
+     * Generate a transaction number
+     */
+    public function generateTransactionNumber(string $type, ?string $date = null): string
+    {
+        $prefix  = $this->getPrefix($type);
+        $year    = $this->getYear($date);
+        $counter = $this->getNextSequence($type);
 
         $length = strlen((string) $counter) > self::DEFAULT_LENGTH
             ? strlen((string) $counter) + 1
@@ -62,7 +100,7 @@ trait TransactionNumberGenerator {
 
     public static function forCustomerCount(): int
     {
-        $count = DB::table('customer_profile')->whereNotNull('acumatica_id')->count();
+        $count = DB::table('customer_profile')->count();
         return (int) $count + 1;
     }
 
@@ -71,15 +109,15 @@ trait TransactionNumberGenerator {
         $stockTransfers = DB::table('stock_transfer_approval as sta')
             ->join('stock_transfer_unit as stu', 'sta.id', '=', 'stu.stock_transfer_id')
             ->where('sta.status', 1)
+            ->where('is_received', '=', 1)
             ->selectRaw("'stock_transfer' AS module, stu.id, sta.updated_at AS date");
 
-        $soldUnits = DB::table('sold_units')
-            ->where('status', 1)
-            ->selectRaw("'sold_unit' AS module, id, updated_at AS date");
+        $repos = DB::table('repo_details as repo')
+            ->selectRaw("'repo' AS module, id, created_at AS date");
 
         $count = DB::query()
             ->fromSub(
-                $stockTransfers->unionAll($soldUnits),
+                $stockTransfers->unionAll($repos),
                 'InventoryOut_Temp'
             )
             ->count();
