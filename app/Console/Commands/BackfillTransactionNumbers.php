@@ -34,15 +34,35 @@ class BackfillTransactionNumbers extends Command
         $type = $this->argument('type');
 
         match ($type) {
-            'customer' => $this->backfillCustomerProfile(),
-            'inventory_in' => $this->backfillInventoryIn(),
-            'inventory_out' => $this->backfillInventoryOut(),
-            'stock_transfer' => $this->backfillStockTransfer(),
-            'receive_transfer' => $this->backfillReceiveTransfer(),
-            'sales' => $this->backfillSales(),
-            'rdaf' => $this->backfillRDAF(),
-            default => $this->error('Invalid type specified.'),
+            'customer'        => $this->backfillCustomerProfile(),
+            'inventory_in'    => $this->backfillInventoryIn(),
+            'inventory_out'   => $this->backfillInventoryOut(),
+            'stock_transfer'  => $this->backfillStockTransfer(),
+            'receive_transfer'=> $this->backfillReceiveTransfer(),
+            'sales'           => $this->backfillSales(),
+            'rdaf'            => $this->backfillRDAF(),
+            default           => $this->error("Invalid type: {$type}"),
         };
+    }
+
+    /**
+     * Customer Profile Backfill
+     */
+    private function backfillCustomerProfile(): void
+    {
+        $customers = DB::table('customer_profile')
+            ->orderBy('created_at')
+            ->get();
+
+        foreach ($customers as $customer) {
+            $transactionNumber = $this->generateTransactionNumber('customer', $customer->created_at);
+
+            DB::table('customer_profile')
+                ->where('id', $customer->id)
+                ->update(['acumatica_id' => $transactionNumber]);
+
+            $this->info("Customer {$customer->id} updated → {$transactionNumber}");
+        }
     }
 
     private function backfillInventoryIn()
@@ -54,7 +74,7 @@ class BackfillTransactionNumbers extends Command
             ->selectRaw("'stock_transfer' AS module, stu.id, sta.updated_at AS date");
 
         $repos = DB::table('repo_details')
-            ->selectRaw("'repo' AS module, id, created_at");
+            ->selectRaw("'repo' AS module, id, created_at AS date");
 
         $records = DB::query()
             ->fromSub(
@@ -64,9 +84,8 @@ class BackfillTransactionNumbers extends Command
             ->orderBy('date')
             ->get();
 
-        foreach ($records as $index => $record) {
-            $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('inventory_in', $rowNumber, $record->date);
+        foreach ($records as $record) {
+            $transactionNumber = $this->generateTransactionNumber('inventory_in', $record->date);
 
             $updateData = [
                 'transaction_number_inventory_in' => $transactionNumber,
@@ -81,20 +100,8 @@ class BackfillTransactionNumbers extends Command
             DB::table($table)
                 ->where('id', $record->id)
                 ->update($updateData);
-        }
-    }
 
-    private function backfillCustomerProfile()
-    {
-        $customers = DB::table('customer_profile')->orderBy('created_at')->get();
-
-        foreach ($customers as $index => $customer) {
-            $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('customer', $rowNumber, $customer->created_at);
-
-            DB::table('customer_profile')
-                ->where('id', $customer->id)
-                ->update(['acumatica_id' => $transactionNumber]);
+            $this->info("{$record->module} {$record->id} → {$transactionNumber}");
         }
     }
 
@@ -103,12 +110,13 @@ class BackfillTransactionNumbers extends Command
         $stockTransfers = DB::table('stock_transfer_approval')->orderBy('created_at')->get();
 
         foreach ($stockTransfers as $index => $transfer) {
-            $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $rowNumber, $transfer->created_at);
+            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $transfer->created_at);
 
             DB::table('stock_transfer_approval')
                 ->where('id', $transfer->id)
                 ->update(['reference_code' => $transactionNumber]);
+
+            $this->info("Stock Transfer {$transfer->id} → {$transactionNumber}");
         }
     }
 
@@ -117,12 +125,13 @@ class BackfillTransactionNumbers extends Command
         $sales = DB::table('sold_units')->orderBy('created_at')->get();
 
         foreach ($sales as $index => $sale) {
-            $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('sales', $rowNumber, $sale->created_at);
+            $transactionNumber = $this->generateTransactionNumber('sales', $sale->created_at);
 
             DB::table('sold_units')
                 ->where('id', $sale->id)
                 ->update(['transaction_number' => $transactionNumber]);
+
+            $this->info("Sales {$sale->id} updated → {$transactionNumber}");
         }
     }
 
@@ -130,13 +139,14 @@ class BackfillTransactionNumbers extends Command
     {
         $rdafs = DB::table('request_approvals')->orderBy('created_at')->get();
 
-        foreach ($rdafs as $index => $rdaf) {
-            $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('rdaf', $rowNumber, $rdaf->created_at);
+        foreach ($rdafs as $rdaf) {
+            $transactionNumber = $this->generateTransactionNumber('rdaf', $rdaf->created_at);
 
             DB::table('request_approvals')
                 ->where('id', $rdaf->id)
                 ->update(['rdaf_transaction_number' => $transactionNumber]);
+
+            $this->info("Rdaf {$rdaf->id} updated → {$transactionNumber}");
         }
     }
 
@@ -152,9 +162,8 @@ class BackfillTransactionNumbers extends Command
             ->orderBy('stock_transfer_approval.created_at')
             ->get();
 
-        foreach ($receiveds as $index => $received) {
-            $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('receive_transfer', $rowNumber, $received->updated_at);
+        foreach ($receiveds as $received) {
+            $transactionNumber = $this->generateTransactionNumber('receive_transfer', $received->updated_at);
 
             DB::table('stock_transfer_unit')
                 ->where('id', $received->unit_id)
@@ -162,6 +171,8 @@ class BackfillTransactionNumbers extends Command
                     'trans_no_received' => $transactionNumber,
                     'received_at' => now(),
                 ]);
+
+            $this->info("Received Transfer {$received->unit_id} updated → {$transactionNumber}");
         }
     }
 
@@ -184,9 +195,8 @@ class BackfillTransactionNumbers extends Command
             ->orderBy('date')
             ->get();
 
-        foreach ($records as $index => $record) {
-            $rowNumber = $index + 1;
-            $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, $record->date);
+        foreach ($records as $record) {
+            $transactionNumber = $this->generateTransactionNumber('inventory_out', $record->date);
 
             $updateData = [
                 'transaction_number_inventory_out' => $transactionNumber,
@@ -198,6 +208,8 @@ class BackfillTransactionNumbers extends Command
             DB::table($table)
                 ->where('id', $record->id)
                 ->update($updateData);
+
+            $this->info("{$record->module} {$record->id} → {$transactionNumber}");
         }
     }
 }

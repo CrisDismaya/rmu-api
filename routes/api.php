@@ -171,7 +171,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('getAllForApprovals/{moduleid}', [StockTransferContoller::class, 'getAllForApprovals']);
 			Route::get('getTransferUnits/{id}', [StockTransferContoller::class, 'getTransferUnits']);
 			Route::post('createStockTransfer', [StockTransferContoller::class, 'createStockTransfer']);
-			Route::post('submitApproverDecision', [StockTransferContoller::class, 'submitApproverDecision']);
+			Route::post('transfer/submitApproverDecision', [StockTransferContoller::class, 'submitApproverDecision']);
 
 			Route::get('getAllReceiveStockTransfer', [StockTransferContoller::class, 'getAllReceiveStockTransfer']);
 			Route::post('getAllFileUploaded', [StockTransferContoller::class, 'getAllFileUploaded']);

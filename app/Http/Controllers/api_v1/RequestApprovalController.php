@@ -1097,7 +1097,7 @@ class RequestApprovalController extends BaseController
                 $create = RequestApproval::create($input);
                 $rec_id = $create->id;
 
-                $transactionNo = $this->generateTransactionNumber('rdaf', null, $create->created_at);
+                $transactionNo = $this->generateTransactionNumber('rdaf', $create->created_at);
                 $create->rdaf_transaction_number = $transactionNo;
                 $create->save();
             }
@@ -1299,7 +1299,7 @@ class RequestApprovalController extends BaseController
                 $create->save();
                 $rec_id = $create->id;
 
-                $transactionNo = $this->generateTransactionNumber('sales', null, $create->created_at);
+                $transactionNo = $this->generateTransactionNumber('sales', $create->created_at);
                 $create->transaction_number = $transactionNo;
                 $create->save();
             }
@@ -1352,7 +1352,7 @@ class RequestApprovalController extends BaseController
                         receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
                         sold_unit::where('id', $request->id)->update([
                             'status' => $request->status,
-                            'transaction_number_inventory_out' => $this->generateTransactionNumber('inventory_out', null, now()),
+                            'transaction_number_inventory_out' => $this->generateTransactionNumber('inventory_out', now()),
                             'inventory_out_at' => now(),
                         ]);
                     // }
