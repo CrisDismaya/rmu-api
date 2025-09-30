@@ -20,7 +20,10 @@ class BranchController extends BaseController
         try {
 
             $validator = Validator::make($request->all(), [
+                'branchCode' => 'required',
+                'warehouseID' => 'required',
                 'name' => 'required',
+                'address' => 'required',
             ]);
 
             if ($validator->fails()) {
@@ -64,7 +67,10 @@ class BranchController extends BaseController
         try {
 
             $validator = Validator::make($request->all(), [
+                'branchCode' => 'required',
+                'warehouseID' => 'required',
                 'name' => 'required',
+                'address' => 'required',
             ]);
 
             if ($validator->fails()) {
