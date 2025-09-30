@@ -5,7 +5,7 @@ namespace App\Http\Controllers\api_v1;
 use App\Http\Controllers\api_v1\BaseController as BaseController;
 use App\Http\Traits\ResuableQuery;
 use Illuminate\Support\Facades\DB;
-use PDF;
+use Barryvdh\DomPDF\Facade\Pdf;
 use App\Http\Traits\TransactionNumberGenerator;
 use Illuminate\Support\Facades\Log;
 

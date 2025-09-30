@@ -49,6 +49,7 @@ class PhysicalInventoryDocController extends BaseController
             'module_id'    => 'required|exists:system_menu,id',
             'month'        => 'required|date_format:Y-m-d',
             'files'        => 'required|array|min:1',
+            'reason'       => 'nullable|string|max:255',
             'files.*'      => 'required|file|mimes:pdf,xls,xlsx|max:10240',
             'doc_types'    => 'required|array|min:1',
             'doc_types.*'  => 'required|integer',
@@ -71,6 +72,7 @@ class PhysicalInventoryDocController extends BaseController
             $physicalInventory = PhysicalInventoryDoc::create([
                 'branch_id'     => $user->branch,
                 'selected_date' => $validated['month'],
+                'reason'        => $validated['reason'] ?? null,
                 'created_by'    => $user->id,
             ]);
 
@@ -183,6 +185,7 @@ class PhysicalInventoryDocController extends BaseController
                 DB::raw("CONCAT(approver.firstname, ' ', approver.lastname) as approver"),
                 DB::raw("CONCAT(maker.firstname, ' ', maker.lastname) as requestor"),
                 DB::raw("FORMAT(files.created_at, 'MMM dd, yyyy') as created_at"),
+                'files.reason'
             ])
             ->joinSub(function ($subquery) use ($module_id) {
                 $subquery->from('files_uploaded')
