@@ -435,7 +435,8 @@ class RequestApprovalController extends BaseController
                     'sold_unit.pt_receipt_no',
                     'sold_unit.pt_date',
                     'sold_unit.pt_bank',
-                    'sold_unit.pt_amount'
+                    'sold_unit.pt_amount',
+                    'sold_unit.pt_receipt_image'
                 )
                 ->join('branches as br', 'repo.branch_id', 'br.id')
                 ->join('brands as brd', 'repo.brand_id', 'brd.id')
@@ -1200,6 +1201,7 @@ class RequestApprovalController extends BaseController
                 'pt_date'       => 'required',
                 'pt_bank'       => 'required',
                 'pt_amount'     => 'required',
+                'pt_receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
             ];
 
             if ($request->sold_type === 'I') {
@@ -1287,6 +1289,23 @@ class RequestApprovalController extends BaseController
                             $create->file_name = $image_name1;
                             $create->path = $folder_path . '/' . $image_name1;
                         }
+                    }
+                }
+
+                if ($request->hasFile('pt_receipt_image')) {
+                    $folder_path = 'image/receipt';
+                    $directory = public_path($folder_path);
+
+                    if (!File::isDirectory($directory)) {
+                        File::makeDirectory($directory, 0777, true, true);
+                    }
+
+                    $image = $request->file('pt_receipt_image');
+                    if ($image) {
+                        $image_name = strtoupper(uniqid() . '_' . $image->getClientOriginalName());
+                        $image->move($directory, $image_name);
+
+                        $create->pt_receipt_image = $folder_path . '/' . $image_name;
                     }
                 }
 

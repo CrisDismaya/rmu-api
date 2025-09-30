@@ -18,6 +18,7 @@ return new class extends Migration
 			$table->date('pt_date')->nullable();
 			$table->string('pt_bank')->nullable();
 			$table->float('pt_amount')->nullable();
+			$table->string('pt_receipt_image')->nullable();
 		});
     }
 
@@ -33,6 +34,7 @@ return new class extends Migration
             $table->dropColumn('pt_date');
             $table->dropColumn('pt_bank');
             $table->dropColumn('pt_amount');
+            $table->dropColumn('pt_receipt_image');
         });
     }
 };
