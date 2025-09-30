@@ -21,6 +21,7 @@ return new class extends Migration
             $table->integer('status')->default(0); // 0 = pending, 1 = approved, 2 = rejected
             $table->string('approved_by')->nullable();
             $table->string('approved_date')->nullable();
+            $table->string('reason')->nullable();
             $table->string('remarks')->nullable();
 
             $table->integer('created_by');
