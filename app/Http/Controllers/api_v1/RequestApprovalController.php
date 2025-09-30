@@ -136,7 +136,7 @@ class RequestApprovalController extends BaseController
                     GROUP BY rud.repo_id
                 ) AS parts ON parts.repo_id = repo.id
                 WHERE received.is_sold = 'N' AND received.status != 4
-                    AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+                    AND ISNULL(files.total_upload_required_files, 0) >= (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
                     AND NOT EXISTS (
                         SELECT 1
                         FROM request_approvals
@@ -458,7 +458,8 @@ class RequestApprovalController extends BaseController
                     'sold_unit.pt_receipt_no',
                     'sold_unit.pt_date',
                     'sold_unit.pt_bank',
-                    'sold_unit.pt_amount'
+                    'sold_unit.pt_amount',
+                    'sold_unit.pt_receipt_image'
                 )
                 ->join('branches as br', 'repo.branch_id', 'br.id')
                 ->join('brands as brd', 'repo.brand_id', 'brd.id')
@@ -633,178 +634,173 @@ class RequestApprovalController extends BaseController
 
             $stmt = DB::select(
                 "DECLARE @roleName Nvarchar(100) = :roleName, @branchId Int = :branchId, @requestBranchId Nvarchar(10) = :requestBranchId;
-                {$cteQuery}
 
-                SELECT distinct
-                    repo.id AS repo_id,
-                    repo.transaction_number_inventory_in AS transacton_number,
-                    repo.msuisva_form_no AS msuisva,
-                    repo.model_engine,
-                    repo.model_chassis,
-                    repo.branch_id,
-                    branches.name AS branchname,
-                    brands.brandname,
+                SELECT
+                    repo.id,
+                    CASE
+                        WHEN stock.transaction_number_inventory_in IS NOT NULL AND stock.is_received != 0 THEN stock.transaction_number_inventory_in
+                        ELSE repo.transaction_number_inventory_in
+                    END AS inventory_in,
+                    CASE
+                        WHEN stock.transaction_number_inventory_out IS NOT NULL THEN stock.transaction_number_inventory_out
+                        ELSE sold.transaction_number_inventory_out
+                    END AS inventory_out,
+                    branch.name AS branch_name,
+		            location.name AS location_name,
+                    LTRIM(RTRIM(
+                        customer.firstname +
+                        CASE
+                            WHEN customer.middlename IS NULL OR customer.middlename = '' OR customer.middlename = '-'
+                                THEN ' '
+                            ELSE ' ' + customer.middlename + ' '
+                        END +
+                        customer.lastname
+                    )) AS ex_owner,
+                    brand.brandname AS brand_name,
                     model.model_name,
-                    color.name AS color,
-                    location.name AS location,
-                    CONCAT(old_owner.firstname, ' ', old_owner.middlename, ' ', old_owner.lastname) AS ex_owner,
-                    old_owner.firstname AS o_firstname,
-                    old_owner.middlename AS o_middlename,
-                    old_owner.lastname AS o_lastname,
-                    repo.created_at AS date_received,
-                    received.principal_balance AS original_srp,
-                    DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) AS standard_matrix_month,
+                    UPPER(repo.model_engine) AS model_engine,
+                    UPPER(repo.model_chassis) AS model_chassis,
+                    color.name AS color_name,
+                    repo.original_srp AS selling_price,
                     CASE
-                        WHEN appraise.approved_price IS NULL THEN (
-                            CASE
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 1 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 6
-                                    THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp ) * .05)
-
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 7 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 12
-                                    THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .10)
-
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 13 and DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) <= 24
-                                    THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .15)
-
-                                WHEN DATEDIFF(MONTH, (CONVERT(DATE, repo.date_sold)), GETDATE()) >= 25
-                                    THEN (repo.original_srp + ISNULL(parts.total_cost_parts, 0)) - (ISNULL(total_parts.total_parts_price, 0) + (repo.original_srp) * .20)
-                            ELSE 0 END
-                        )
-                        ELSE appraise.approved_price + ISNULL((
-                            SELECT SUM(settled_total_cost)
-                            FROM transactions
-                            WHERE repo_id = repo.id AND
-                            row_num > (
-                                SELECT row_num
-                                FROM transactions
-                                WHERE repo_id = repo.id AND source_process = 'appraisal'
-                            )
-                        ), 0)
-                    END AS current_price,
-                    req.approved_price,
-                    DATEDIFF(DAY, (CONVERT(DATE, repo.date_surrender)), GETDATE()) AS aging, qty.quantity,
+                        WHEN sold.sold_date IS NOT NULL
+                            THEN DATEDIFF(DAY, CONVERT(DATE, repo.date_surrender), CONVERT(DATE, sold.sold_date))
+                        ELSE
+                            DATEDIFF(DAY, CONVERT(DATE, repo.date_surrender), GETDATE())
+                    END AS aging_days,
+                    1 AS quantity,
+                    1 AS available,
                     CASE
-                        WHEN sold_count.quantity IS NULL AND transfer_count.quantity IS NULL THEN 1
-                        ELSE 0
-                    END AS availability,
-                    CASE
-                        WHEN sold_count.quantity IS NULL AND transfer_count.quantity IS NOT NULL THEN 'FOR TRANSFER'
-                        WHEN sold_count.quantity IS NOT NULL AND transfer_count.quantity IS NULL THEN 'FOR SELLING'
-                        WHEN refurbish.status = 1 THEN 'SUBJECT FOR REFURBISH'
-                        WHEN refurbish.status = 3 THEN 'ONGOING REFURBISH'
-                        ELSE 'AVAILABLE'
-                    END AS status,
-                    received.is_sold,
-                    parts.total_cost_parts,
-                    repo.transaction_number_inventory_in AS inventory_in,
-                    inventory_out AS inventory_out
+                        -- 1. SOLD (highest priority)
+                        WHEN sold.status = 1 THEN 'Sold'
+                        WHEN sold.status = 2 THEN 'Available' -- sale canceled/disapproved
+
+                        -- 2. SETTLEMENT
+                        WHEN refurbish.approval_status = 3 AND settlement.approval_status = 0 THEN 'Pending for Settlement Approval'
+                        WHEN refurbish.approval_status = 3 AND settlement.approval_status = 2 THEN 'Proceed to Settlement'
+                        WHEN refurbish.approval_status = 4 AND settlement.approval_status = 1 THEN 'Available'
+
+                        -- 3. REFURBISH
+                        WHEN refurbish.approval_status = 0 THEN 'Pending for Refurbish Approval'
+                        WHEN refurbish.approval_status IN (1, 2) THEN 'Available'
+
+                        -- 4. APPRAISAL
+                        WHEN appraisal.approval_status = 0 THEN 'Pending for Appraisal Approval'
+                        WHEN appraisal.approval_status IN (1, 2) THEN 'Available'
+
+                        -- 5. STOCK TRANSFER
+                        WHEN stock.approval_status = 0 THEN 'Pending Stock Transfer Approval'
+                        WHEN stock.approval_status = 1 AND stock.is_received = 0 THEN 'Pending for Received Transferred Unit'
+                        WHEN stock.approval_status = 1 AND stock.is_received = 1 THEN 'Available'
+                        WHEN stock.approval_status = 2 THEN 'Available'
+
+                        -- 6. RECEIVED
+                        WHEN received.status = 0 THEN 'Pending for Repo Tagging Approval'
+                        WHEN received.status = 2 THEN 'Disapproved for Repo Tagging Approval'
+                        WHEN received.status = 4 THEN 'For Repo Reviewing for Approval'
+                        WHEN received.status = 1 THEN 'Available'
+
+                        -- 7. DEFAULT
+                        ELSE 'Available'
+                    END AS current_status,
+                    IIF(stock.stock_approval_id IS NOT NULL, 1, 0) AS is_stock_transferred,
+                    IIF(appraisal.id IS NOT NULL, 1, 0) AS is_appraised,
+                    IIF(refurbish.id IS NOT NULL, 1, 0) AS is_refurbished,
+                    IIF(settlement.id IS NOT NULL, 1, 0) AS is_settled,
+                    IIF(sold.id IS NOT NULL, 1, 0) AS is_sold
+
+
                 FROM repo_details AS repo
-                INNER JOIN recieve_unit_details AS received ON received.repo_id = repo.id
+                INNER JOIN recieve_unit_details AS received ON repo.id = received.repo_id AND repo.branch_id = received.branch
+                LEFT JOIN branches AS branch ON repo.branch_id = branch.id
+                LEFT JOIN customer_profile AS customer ON repo.customer_acumatica_id = customer.id
+                LEFT JOIN brands AS brand ON repo.brand_id = brand.id
+                LEFT JOIN unit_models AS model ON repo.model_id = model.id
+                LEFT JOIN unit_colors AS color ON repo.color_id = color.id
+	            LEFT JOIN locations AS location ON location.id = repo.location
+
                 LEFT JOIN (
-                    SELECT rud.repo_id, SUM(price) total_parts_price
-                    FROM recieve_unit_details rud
-                    LEFT JOIN recieve_unit_spare_parts rus ON rud.id = rus.recieve_id
-                    WHERE rus.is_deleted = 0 and (rus.refurb_decision IS NULL OR rus.refurb_decision = 'na')
-                    GROUP BY rud.repo_id
-                ) AS total_parts ON total_parts.repo_id = repo.id
+                    SELECT
+                        sub.approvalid AS stock_approval_id,
+                        sub.recievedid AS recieved_id,
+                        approval.status AS approval_status,
+                        CASE
+                            WHEN approval.status = 1 THEN approval.to_branch
+                            WHEN approval.status = 2 THEN approval.from_branch
+                            ELSE approval.from_branch
+                        END AS current_branch,
+                        unit.is_received AS is_received,
+                        unit.is_use_old_files,
+                        sub.unitid AS stock_unit_id,
+                        unit.transaction_number_inventory_in,
+                        unit.transaction_number_inventory_out
+                    FROM (
+                        SELECT
+                            MAX(approval.id) AS approvalid, MAX(unit.recieved_unit_id) AS recievedid, MAX(unit.id) AS unitid
+                        FROM stock_transfer_approval AS approval
+                        INNER JOIN stock_transfer_unit AS unit ON approval.id = unit.stock_transfer_id
+                        GROUP BY unit.recieved_unit_id
+                    ) sub
+                    INNER JOIN stock_transfer_approval approval ON sub.approvalid = approval.id
+                    INNER JOIN stock_transfer_unit unit ON sub.unitid = unit.id AND sub.approvalid = unit.stock_transfer_id AND sub.recievedid = unit.recieved_unit_id
+                ) stock ON received.id = stock.recieved_id AND repo.branch_id = stock.current_branch
+
                 LEFT JOIN (
-                    SELECT a.repo_id, a.approved_price
-                    FROM request_approvals AS a
-                    INNER JOIN (
-                        SELECT MAX(id) AS id, repo_id
+                    SELECT
+                        appraisal.id,
+                        appraisal.repo_id,
+                        appraisal.branch,
+                        appraisal.status AS approval_status,
+                        history.appraised_price AS appraised_approved_price
+                    FROM (
+                        SELECT
+                            MAX(id) AS max_id, MAX(repo_id) AS max_repo_id, MAX(branch) AS max_branch_id
                         FROM request_approvals
                         GROUP BY repo_id
-                    ) AS max_request ON max_request.id = a.id
-                ) AS req ON req.repo_id = repo.id
-                INNER JOIN branches ON branches.id = repo.branch_id
-                INNER JOIN brands ON brands.id = repo.brand_id
-                INNER JOIN unit_models AS model ON model.id = repo.model_id
-                INNER JOIN unit_colors AS color ON color.id = repo.color_id
-                INNER JOIN locations AS location ON location.id = repo.location
-                INNER JOIN customer_profile AS old_owner ON old_owner.id = repo.customer_acumatica_id
-                LEFT JOIN (
-                    SELECT id, COUNT(id) AS quantity
-                    FROM repo_details
-                    GROUP BY id
-                ) AS qty ON qty.id = repo.id
-                LEFT JOIN (
-                    SELECT repo_id, COUNT(repo_id) AS quantity
-                    FROM sold_units
-                    WHERE status = 0
-                    GROUP BY repo_id
-                ) AS sold_count ON sold_count.repo_id = repo.id
-                LEFT JOIN (
-                    SELECT b.recieved_unit_id, COUNT(b.recieved_unit_id) AS quantity
-                    FROM stock_transfer_approval a
-                    INNER JOIN stock_transfer_unit b ON b.stock_transfer_id = a.id
-                    WHERE a.status = 0
-                    GROUP BY recieved_unit_id
-                ) AS transfer_count ON transfer_count.recieved_unit_id = received.id
-                LEFT JOIN (
-                    SELECT repo_id, status
-                    FROM request_refurbishes
-                ) AS refurbish ON refurbish.repo_id = repo.id
+                    ) SUB
+                    INNER JOIN request_approvals AS appraisal ON SUB.max_id = appraisal.id
+                    LEFT JOIN appraisal_histories AS history ON SUB.max_id = history.appraisal_req_id
+                ) appraisal ON repo.id = appraisal.repo_id AND repo.branch_id = appraisal.branch
+
                 LEFT JOIN (
                     SELECT
-                        sub.approvalid, sub.recievedid, sta1.status AS approvalstatus,
-                        CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END AS current_branch,
-                        stu1.is_received AS isreceived, stu1.is_use_old_files, rud1.repo_id as repoid, sub.unitid
-                    FROM (
-                        SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
-                        FROM stock_transfer_approval sta
-                        INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
-                        GROUP BY stu.recieved_unit_id
-                    ) sub
-                    INNER JOIN stock_transfer_approval sta1 ON sub.approvalid = sta1.id
-                    INNER JOIN stock_transfer_unit stu1 ON sub.unitid = stu1.id AND sub.approvalid = stu1.stock_transfer_id AND sub.recievedid = stu1.recieved_unit_id
-                    INNER JOIN recieve_unit_details rud1 ON sub.recievedid = rud1.id
-                ) AS [transfer] ON repo.id = [transfer].repoid
-                LEFT JOIN (
-                    SELECT sub.received_unit_id, history.appraised_price AS approved_price
+                        refurbish.id,
+                        refurbish.repo_id,
+                        refurbish.branch AS branch_id,
+                        refurbish.status AS approval_status
                     FROM (
                         SELECT
-                            request.received_unit_id, MAX(history.appraisal_req_id) AS appraisal_req_id
-                        FROM request_approvals request
-                        LEFT JOIN appraisal_histories history ON request.id = history.appraisal_req_id
-                        WHERE request.status = 1
-                        GROUP BY request.received_unit_id
-                    ) sub
-                    LEFT JOIN appraisal_histories history ON sub.appraisal_req_id = history.id
-                ) appraise ON received.id = appraise.received_unit_id
+                            MAX(id) AS max_id, MAX(repo_id) AS max_repo_id, MAX(branch) AS max_branch_id
+                        FROM request_refurbishes
+                        GROUP BY repo_id
+                    ) SUB
+                    INNER JOIN request_refurbishes AS refurbish ON SUB.max_id = refurbish.id
+                ) refurbish ON repo.id = refurbish.repo_id AND repo.branch_id = refurbish.branch_id
+
                 LEFT JOIN (
                     SELECT
-                        request.repo_id,
-                        SUM(total_cost) AS total_cost_parts
-                    FROM request_refurbishes request
-                    LEFT JOIN refurbish_processes settle ON request.id = settle.refurbish_req_id
-                    LEFT JOIN (
+                        refurbish.id,
+                        refurbish.repo_id,
+                        refurbish.branch AS branch_id,
+                        process.status AS approval_status
+                    FROM (
                         SELECT
-                            refurb_id, SUM(actual_price) AS total_cost
-                        FROM recieve_unit_spare_parts
-                        WHERE refurb_id IS NOT NULL
-                        GROUP BY refurb_id
-                    ) parts ON request.id = parts.refurb_id
-                    WHERE settle.status = 1
-                    GROUP BY request.repo_id
-                ) parts ON repo.id = parts.repo_id
-                LEFT JOIN (
-                    SELECT received.repo_id, stu.transaction_number_inventory_out AS inventory_out
-                    FROM stock_transfer_approval sta
-                    INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
-                    INNER JOIN recieve_unit_details received ON stu.recieved_unit_id = received.id
-                    WHERE sta.status = 1
-                    UNION ALL
-                    SELECT repo_id, transaction_number_inventory_out
-                    FROM sold_units
-                    WHERE status = 1
-                ) inventory ON repo.id = inventory.repo_id
-                WHERE received.status != 4 AND repo.branch_id = ISNULL([transfer].current_branch, repo.branch_id)
-                AND (
-                    (@roleName = 'Warehouse Custodian' AND repo.branch_id = @branchId) OR
-                    (@roleName != 'Warehouse Custodian' AND @requestBranchId != 0 AND repo.branch_id = @requestBranchId) OR
-                    (@roleName != 'Warehouse Custodian' AND @requestBranchId = 0)
-                )
-                ORDER BY repo.created_at DESC",
+                            MAX(id) AS max_id, MAX(repo_id) AS max_repo_id, MAX(branch) AS max_branch_id
+                        FROM request_refurbishes
+                        GROUP BY repo_id
+                    ) SUB
+                    INNER JOIN request_refurbishes AS refurbish ON SUB.max_id = refurbish.id
+                    INNER JOIN refurbish_processes AS process ON refurbish.id = process.refurbish_req_id
+                ) settlement ON repo.id = settlement.repo_id AND repo.branch_id = settlement.branch_id
+
+                LEFT JOIN sold_units AS sold ON repo.id = sold.repo_id AND repo.branch_id = sold.branch
+
+                WHERE repo.branch_id = CASE
+                    WHEN @roleName = 'Warehouse Custodian' THEN @branchId
+                    WHEN @roleName != 'Warehouse Custodian' AND @requestBranchId != 0 THEN @requestBranchId
+                    ELSE repo.branch_id  -- allow all branches
+                END
+                ORDER BY repo.id DESC",
                 [ 'roleName' => Auth::user()->userrole, 'branchId' => Auth::user()->branch, 'requestBranchId' => $request->branchId ]
             );
             $datatables = Datatables::of($stmt);
@@ -1129,29 +1125,21 @@ class RequestApprovalController extends BaseController
 
                 $approval = $existing;
             } else {
-                // Fresh create
-                $approval = RequestApproval::create([
-                    'received_unit_id'            => $request->received_unit_id,
-                    'repo_id'                     => $request->repo_id,
-                    'branch'                      => $request->branch,
-                    'unit_age_days'               => $request->unit_age_days,
-                    'depreciation_cost'           => $request->depreciation_cost,
-                    'estimated_missing_dmg_parts' => $request->estimated_missing_dmg_parts,
-                    'total_missing_dmg_parts'     => $request->total_missing_dmg_parts,
-                    'suggested_price'             => $request->suggested_price,
-                    'approved_price'              => $request->approved_price,
-                    'status'                      => 0,
-                    'remarks'                     => null,
-                    'created_by'                  => $userId,
-                ]);
+                $create = RequestApproval::create($input);
+                $rec_id = $create->id;
 
-                // Generate transaction number
-                $transactionNo = $this->generateTransactionNumber('rdaf', null, $approval->created_at);
-                $approval->update(['rdaf_transaction_number' => $transactionNo]);
+                $transactionNo = $this->generateTransactionNumber('rdaf', $create->created_at);
+                $create->rdaf_transaction_number = $transactionNo;
+                $create->save();
+            }
 
-                // Mark receive_unit as pending
-                receive_unit::where('id', $request->received_unit_id)
-                    ->update(['status' => 0]);
+            $matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $rec_id);
+
+            if ($matrix['status'] == 'error') {
+                return $matrix;
+            } else {
+                //update the first holder of the transaction
+                $save_holder = RequestApproval::where('id', $rec_id)->update(['approver' => $matrix['message']]);
             }
 
             // Assign first approver
@@ -1285,6 +1273,7 @@ class RequestApprovalController extends BaseController
                 'pt_date'       => 'required',
                 'pt_bank'       => 'required',
                 'pt_amount'     => 'required',
+                'pt_receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
             ];
 
             if ($request->sold_type === 'I') {
@@ -1375,11 +1364,28 @@ class RequestApprovalController extends BaseController
                     }
                 }
 
+                if ($request->hasFile('pt_receipt_image')) {
+                    $folder_path = 'image/receipt';
+                    $directory = public_path($folder_path);
+
+                    if (!File::isDirectory($directory)) {
+                        File::makeDirectory($directory, 0777, true, true);
+                    }
+
+                    $image = $request->file('pt_receipt_image');
+                    if ($image) {
+                        $image_name = strtoupper(uniqid() . '_' . $image->getClientOriginalName());
+                        $image->move($directory, $image_name);
+
+                        $create->pt_receipt_image = $folder_path . '/' . $image_name;
+                    }
+                }
+
 
                 $create->save();
                 $rec_id = $create->id;
 
-                $transactionNo = $this->generateTransactionNumber('sales', null, $create->created_at);
+                $transactionNo = $this->generateTransactionNumber('sales', $create->created_at);
                 $create->transaction_number = $transactionNo;
                 $create->save();
             }
@@ -1432,7 +1438,7 @@ class RequestApprovalController extends BaseController
                         receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
                         sold_unit::where('id', $request->id)->update([
                             'status' => $request->status,
-                            'transaction_number_inventory_out' => $this->generateTransactionNumber('inventory_out', null, now()),
+                            'transaction_number_inventory_out' => $this->generateTransactionNumber('inventory_out', now()),
                             'inventory_out_at' => now(),
                         ]);
                     // }

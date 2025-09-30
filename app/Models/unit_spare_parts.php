@@ -8,9 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 class unit_spare_parts extends Model
 {
     use HasFactory;
-    
+
     protected $table = 'recieve_unit_spare_parts';
-    
+
     protected $fillable = [
         'recieve_id',
         'parts_id',
@@ -20,6 +20,7 @@ class unit_spare_parts extends Model
         // 'is_deleted'
         'actual_price',
         'refurb_decision',
+        'dir_image',
     ];
 
     function spare_parts_details(){

@@ -18,6 +18,8 @@ return new class extends Migration
 			$table->dateTime('inventory_out_at')->nullable();
 			$table->string('trans_no_received')->nullable();
 			$table->dateTime('received_at')->nullable();
+			$table->string('transaction_number_inventory_in')->nullable();
+			$table->dateTime('inventory_in_at')->nullable();
 		});
     }
 
@@ -33,6 +35,8 @@ return new class extends Migration
             $table->dropColumn('inventory_out_at');
             $table->dropColumn('trans_no_received');
             $table->dropColumn('received_at');
+            $table->dropColumn('transaction_number_inventory_in');
+            $table->dropColumn('inventory_in_at');
         });
     }
 };

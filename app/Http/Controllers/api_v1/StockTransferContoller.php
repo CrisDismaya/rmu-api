@@ -89,7 +89,7 @@ class StockTransferContoller extends BaseController
 					AND (app.approvalstatus IS NULL OR app.approvalstatus IN (1, 2))
 					AND (sld.id IS NULL OR sld.status IN (2))
 					AND (ref.id IS NULL OR ref.status IN (2, 3, 4))
-					AND ISNULL(files.total_upload_required_files, 0) = (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
+					AND ISNULL(files.total_upload_required_files, 0) >= (SELECT COUNT(*) FROM files WHERE isRequired = 1 AND status = 1)
                     ORDER BY rep.created_at DESC
 				",
 				array(Auth::user()->branch)
@@ -208,11 +208,7 @@ class StockTransferContoller extends BaseController
                 'reason_for_transfer' => $request->reason_for_transfer,
             ]);
 
-            $transactionNumber = $this->generateTransactionNumber(
-                'stock_transfer',
-                null,
-                $stockTransfer->created_at
-            );
+            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $stock->created_at);
 
             $stockTransfer->update(['reference_code' => $transactionNumber]);
 
@@ -284,12 +280,9 @@ class StockTransferContoller extends BaseController
                     stock_transfer::where('id', $recordId)
                         ->update(['status' => 1]);
 
-                    $units = stock_transfer_units::where('stock_transfer_id', $recordId)->get();
-                    $startCount = $this->forInventoryOutCount();
-
-                    foreach ($units as $index => $unit) {
-                        $rowNumber = $startCount + $index;
-                        $transactionNumber = $this->generateTransactionNumber('inventory_out', $rowNumber, now());
+                    $units  = stock_transfer_units::where('stock_transfer_id', $request->id)->get();
+                    foreach ($units as $unit) {
+                        $transactionNumber = $this->generateTransactionNumber('inventory_out', now());
 
                         $unit->update([
                             'transaction_number_inventory_out' => $transactionNumber,
@@ -430,11 +423,13 @@ class StockTransferContoller extends BaseController
 			stock_transfer_units::where('id', '=', $request->unitid)->update([
                 'is_received' => '1',
                 'is_use_old_files' => $request->decisionid,
-                'trans_no_received' => $this->generateTransactionNumber('receive_transfer', null, now()),
+                'trans_no_received' => $this->generateTransactionNumber('receive_transfer', now()),
                 'received_at' => Carbon::now(),
+                'transaction_number_inventory_in' => $this->generateTransactionNumber('inventory_in', now()),
+                'inventory_in_at' => Carbon::now(),
             ]);
-			repo::where('id', '=', $repo->id)->update(['branch_id' => Auth::user()->branch, 'transfer_branch_id' => $request->unitid]);
-			receive_unit::where('id', '=', $receive->id)->update(['branch' => Auth::user()->branch, 'status' => '0']);
+			$repo->update(['branch_id' => Auth::user()->branch, 'transfer_branch_id' => $request->unitid]);
+			$receive->update(['branch' => Auth::user()->branch, 'status' => '0']);
 
 			// 1 = Use Previous Images / 2 = Upload New Images
 			foreach ($pictures as $pics) {

@@ -21,6 +21,7 @@ class PhysicalInventoryDoc extends Model
         'status',
         'approved_by',
         'approved_date',
+        'reason',
         'remarks',
     ];
 }
