@@ -9,20 +9,23 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use App\Models\repo;
+use App\Models\user_role;
 use App\Models\FilesUploaded;
 use App\Models\receive_unit;
 use App\Models\unit_spare_parts;
+use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
 use App\Http\Traits\helper;
 use App\Http\Traits\ResuableQuery;
 use Illuminate\Support\Carbon;
 use Yajra\DataTables\Facades\DataTables;
 use App\Http\Traits\TransactionNumberGenerator;
+use App\Http\Traits\ApprovalSequence;
 use Illuminate\Support\Facades\Log;
 
 class RepoController extends BaseController
 {
 
-	use helper, ResuableQuery, TransactionNumberGenerator;
+	use helper, ResuableQuery, TransactionNumberGenerator, ApprovalSequence;
 
 	public function createRepo(Request $request)
 	{
@@ -198,19 +201,26 @@ class RepoController extends BaseController
                 }
 
 				$module = DB::table('system_menu')->where('file_path', '=', 'repo_tagging_approval.php')->first();
-				$matrix =  $this->ApprovalMatrixActivityLog($module->id, $receive_latestInsertedId);
-				if ($matrix['status'] == 'error') {
-					return $matrix;
-				} else {
-					receive_unit::where('id', $receive_latestInsertedId)->update(['approver' => $matrix['message'], 'date_approved' => null]);
-				}
+				$firstApproverRoleId =  $this->assignFirstApprover($module->id);
+                if ($firstApproverRoleId !== null) {
+                    receive_unit::where('id', $receive_latestInsertedId)
+                        ->update([
+                            'approver' => $firstApproverRoleId,
+                            'date_approved' => null
+                        ]);
+                }
 
 				DB::commit();
 				return $this->sendResponse([], 'REPO Ddetails added successfully.');
 			}
 		}
 		catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
+			Log::error("Repo creation failed", [
+                'exception' => get_class($th),
+                'message' => $th->getMessage(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+            return $this->sendError($th->getMessage());
 		}
 	}
 
@@ -749,57 +759,68 @@ class RepoController extends BaseController
 	}
 
 	public function fetch_repo_approval(Request $request, $moduleid)
-	{
-		try {
-            $cteQuery = $this->cteQuery();
+    {
+        try {
 
-            $role = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId;
-                {$cteQuery}
+            $userrole = Auth::user()->userrole;
 
-                SELECT
-                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles
-                ",
-                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
-            );
+            $users = ApprovalMatrixSetting::getApprovalMatrix($moduleid, $userrole);
 
-			$stmt = DB::table('repo_details as rep')
-				->select(
-					'rep.*',
-					'bth.name AS branch_name',
-					'cus.acumatica_id',
-					DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
-					'brd.brandname',
-					'mdl.model_name',
-					'rep.model_engine',
-					'rep.model_chassis',
-					DB::raw("CASE
-						WHEN rud.status = '4' THEN 'Repo Tagging Approval'
-						WHEN rud.status = '0' AND UPPER(rud.is_sold) = 'N' THEN 'Subject for Reprice Approval'
-						WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'N' THEN 'For Sell'
-						WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'Y' THEN 'Sold'
-						WHEN rud.status = '2' THEN 'Disapproved'
-						ELSE ''
-					END AS current_status"),
-					// DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
-					DB::raw("UPPER(role.user_role_name) AS approver_name"),
-					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
-				)
-				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
-				->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
-				->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
-				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
-				->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
-				->leftJoin('user_role as role', 'role.id', '=', 'rud.approver')
-                // ->where('role.user_role_name', Auth::user()->userrole)
-				->where('rud.status', '=', 4);
+            $userRow = collect($users)->first();
+
+            if (! $userRow) {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverRoleId = $userRow->approver_role_id ?? null;
+            $approverUsersRaw = $userRow->approver_users ?? '[]';
+            $decoded = json_decode($approverUsersRaw, true);
+            $userIds = collect($decoded)->pluck('id')->all();
+            $currentUserId = Auth::id();
+
+            if (! in_array($currentUserId, $userIds)) {
+                return DataTables::of(collect())->make(true);
+            }
+            
+            $approverIds = is_array($approverRoleId) ? $approverRoleId : [$approverRoleId];
+
+            $stmt = DB::table('repo_details as rep')
+                ->select(
+                    'rep.*',
+                    'bth.name AS branch_name',
+                    'cus.acumatica_id',
+                    DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
+                    'brd.brandname',
+                    'mdl.model_name',
+                    'rep.model_engine',
+                    'rep.model_chassis',
+                    DB::raw("CASE
+                        WHEN rud.status = '4' THEN 'Repo Tagging Approval'
+                        WHEN rud.status = '0' AND UPPER(rud.is_sold) = 'N' THEN 'Subject for Reprice Approval'
+                        WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'N' THEN 'For Sell'
+                        WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'Y' THEN 'Sold'
+                        WHEN rud.status = '2' THEN 'Disapproved'
+                        ELSE ''
+                    END AS current_status"),
+                    // DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
+                    DB::raw("UPPER(role.user_role_name) AS approver_name"),
+                    DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status")
+                )
+                ->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
+                ->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
+                ->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
+                ->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
+                ->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
+                ->leftJoin('user_role as role', 'role.id', '=', 'rud.approver')
+                ->where('rud.status', '=', 4)
+                ->where('rud.approver', '=', $approverIds);
+
 
             return DataTables::of($stmt)
                 ->filter(function ($query) use ($request) {
-                    if ($search = $request->get('search')['value']) {
+                    $search = $request->get('search')['value'] ?? null;
+                    if ($search) {
+                        Log::info('[fetch_repo_approval] filter closure - applying search filter', ['search' => $search]);
                         $query->where(function ($q) use ($search) {
                             $q->orWhere('bth.name', 'like', "%{$search}%")
                             ->orWhere('cus.acumatica_id', 'like', "%{$search}%")
@@ -816,20 +837,17 @@ class RepoController extends BaseController
                 })
                 ->make(true);
 
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+        } catch (\Throwable $th) {
+            Log::error('[fetch_repo_approval] Exception', [
+                'message' => $th->getMessage(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	public function repo_approver_decision(Request $request)
 	{
-
-		$repo = DB::table('repo_details')->where('id', '=', $request->recordid)->first();
-        Log::error('repo_details', ['repo_details' => $repo]);
-		$maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $repo->id)->where('branch', '=', $repo->branch_id)->max('id');
-        Log::error('repo_details 1', ['recieve_unit_details' => $maxid]);
-		$received = DB::table('recieve_unit_details')->where('id', '=', $maxid)->first();
-        Log::error('repo_details 2', ['recieve_unit_details' => $received]);
 
 		try {
 			$validator = Validator::make($request->all(), [
@@ -845,27 +863,72 @@ class RepoController extends BaseController
 				return $this->sendError('Validation Error.', $validator->errors());
 			}
 
-			// Get the next approver in approval matrix
-			$sequence = $this->approverDecision($request->moduleid, $received->id, Auth::user()->id);
-            Log::error('$sequence', ['sequence' => $sequence]);
+            $repo = DB::table('repo_details')->where('id', '=', $request->recordid)->first();
+            $maxid = DB::table('recieve_unit_details')->where('repo_id', '=', $repo->id)->where('branch', '=', $repo->branch_id)->max('id');
+            $received = DB::table('recieve_unit_details')->where('id', '=', $maxid)->first();
 
-			DB::beginTransaction();
+            $userId   = Auth::id();
+            $roleId   = user_role::where('user_role_name', Auth::user()->userrole)->value('id');
+            $moduleId = $request->moduleid;
+            $recordId = $received->id;
 
-			receive_unit::where('id', $received->id)
-				->update([
-					'loan_amount' => $request->loanAmount,
-					'total_payments' => $request->totalPayment,
-					'principal_balance' => $request->principalBalance,
-					'status' => $request->status,
-					'date_approved' => Carbon::now(),
-				]);
+            $check = $this->checkIfApproved($moduleId, $recordId, $roleId);
+            if ($check['status']) {
+                $approverName = $check['name'] ?? 'Unknown Approver';
+                return $this->sendError(
+                    "This request has already been approved by {$approverName}.",
+                    ['approver' => $check['approver']]
+                );
+            }
 
-			DB::commit();
+            if (!$received) {
+                return $this->sendError('Request not found.');
+            }
 
-			$msg = $request->status == 0 ? 'Repo Tagging Successfully Approved!' : 'Repo Tagging Successfully disapproved!';
-			return $this->sendResponse([], $msg);
+            DB::beginTransaction();
+
+            $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
+            $nextApproverId = null;
+
+            if ($request->status == 1) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'A');
+
+                $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
+
+                if ($nextApprover) {
+                    $nextApproverId = $nextApprover->approverId;
+                } else {
+                    receive_unit::where('id', $recordId)
+                        ->update([
+                            'loan_amount' => $request->loanAmount,
+                            'total_payments' => $request->totalPayment,
+                            'principal_balance' => $request->principalBalance,
+                        ]);
+                }
+            }
+
+            receive_unit::where('id', $recordId)
+                ->update([
+                    'status' => $request->status,
+                    'approver' => $nextApproverId ?? $roleId,
+                    'date_approved' => Carbon::now(),
+                ]);
+
+            DB::commit();
+
+            return $this->sendResponse([],
+                $request->status == 0
+                    ? 'Repo Tagging Successfully Approved!'
+                    : 'Repo Tagging Successfully disapproved!'
+            );
 		} catch (\Throwable $th) {
-			$this->rollBaclDecision($request->moduleid, $received->id, Auth::user()->id);
+            DB::rollBack();
+			// $this->rollBaclDecision($request->moduleid, $received->id, Auth::user()->id);
+            Log::error("Repo creation failed", [
+                'exception' => get_class($th),
+                'message' => $th->getMessage(),
+                'trace' => $th->getTraceAsString(),
+            ]);
 			return $this->sendError($th->errorInfo[2]);
 		}
 	}

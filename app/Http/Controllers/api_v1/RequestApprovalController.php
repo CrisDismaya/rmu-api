@@ -14,6 +14,7 @@ use App\Models\unit_aging;
 use App\Models\receive_unit;
 use App\Models\sold_unit;
 use App\Models\user_role;
+use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
 use App\Http\Traits\helper;
 use App\Http\Traits\acumaticaService;
 use App\Http\Traits\ResuableQuery;
@@ -183,21 +184,35 @@ class RequestApprovalController extends BaseController
     public function getAllReceivedUnit($moduleid)
     {
         try {
-            $user = DB::table('users')
-                ->select(
-                    DB::raw("users.branch AS branch_id"),
-                    DB::raw("users.id AS user_id"),
-                    DB::raw("roles.id AS role_id")
-                )
-                ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
-                ->where('users.id', Auth::user()->id)
-                ->first();
+            $user = Auth::user();
+            $id = $user->id;
+            $role = $user->userrole;
+            $branch = $user->branch;
 
+            $users = ApprovalMatrixSetting::getApprovalMatrix($moduleid, $role);
+
+            $userRow = collect($users)->first();
+
+            if (! $userRow && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverRoleId = $userRow->approver_role_id ?? null;
+            $approverUsersRaw = $userRow->approver_users ?? '[]';
+            $decoded = json_decode($approverUsersRaw, true);
+            $userIds = collect($decoded)->pluck('id')->all();
+            $currentUserId = Auth::id();
+
+            if (! in_array($currentUserId, $userIds) && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverIds = is_array($approverRoleId) ? $approverRoleId : [$approverRoleId];
 
             $cteQuery = $this->cteQuery();
 
             $stmt = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId, @branchId INT = :branchId;
+                DECLARE @roleName NVARCHAR(100) = :roleName, @branchId INT = :branchId, @approverRoleId NVARCHAR(MAX) = :approverRoleId;
                 {$cteQuery}
 
                 SELECT
@@ -293,32 +308,12 @@ class RequestApprovalController extends BaseController
                 ) AS parts ON parts.repo_id = repo.id
                 WHERE
                     (
-                        ( -- approver
-                            (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId) = 1
-                                AND req_app.status = 0 AND req_app.approver = @roleId
-                        )
-                        OR
-                        ( -- not approver possible warehouse custodian
-                            (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId) != 1
-                                AND req_app.status IN ('0', '2') AND req_app.branch = @branchId
-                        )
+                        (@roleName = 'Warehouse Custodian' AND repo.branch_id = @branchId) OR
+                        (@roleName != 'Warehouse Custodian') AND req_app.approver IN (@approverRoleId)
                     )
                 ORDER BY req_app.id DESC
                 ",
-                [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id, 'branchId' => $user->branch_id ]
-            );
-
-            $role = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId;
-                {$cteQuery}
-
-                SELECT
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles
-                ",
-                [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id ]
+                [ 'roleName' => $role, 'branchId' => $branch, 'approverRoleId' => $approverIds  ]
             );
 
             return Datatables::of($stmt)->make(true);
@@ -390,31 +385,31 @@ class RequestApprovalController extends BaseController
     {
 
         try {
-            $auth = Auth::user();
-            $user = DB::table('users')
-                ->select(
-                    "users.branch",
-                    DB::raw("users.id AS user_id"),
-                    DB::raw("roles.id AS role_id")
-                )
-                ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
-                ->where('users.id', $auth->id)
-                ->first();
+            $user = Auth::user();
+            $id = $user->id;
+            $role = $user->userrole;
+            $branch = $user->branch;
 
-            $cteQuery = $this->cteQuery();
+            $users = ApprovalMatrixSetting::getApprovalMatrix($moduleid, $role);
 
-            $role = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId;
-                {$cteQuery}
+            $userRow = collect($users)->first();
 
-                SELECT
-                    CASE (SELECT COUNT(DISTNCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles
-                ",
-                [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id ]
-            );
+            if (! $userRow && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverRoleId = $userRow->approver_role_id ?? null;
+            $approverUsersRaw = $userRow->approver_users ?? '[]';
+            $decoded = json_decode($approverUsersRaw, true);
+            $userIds = collect($decoded)->pluck('id')->all();
+            $currentUserId = Auth::id();
+
+            if (! in_array($currentUserId, $userIds) && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverIds = is_array($approverRoleId) ? $approverRoleId : [$approverRoleId];
+
 
             $data = DB::table('repo_details as repo')
                 ->select(
@@ -473,10 +468,10 @@ class RequestApprovalController extends BaseController
                 })
                 ->join('customer_profile as new_owner', 'sold_unit.new_customer', 'new_owner.id');
 
-            if ($role[0]->roles == 'Approver') {
-                $data->where('sold_unit.status', '0')->whereIn('sold_unit.approver', [$user->user_id, $user->role_id]);
-            } else {
-                $data->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.branch', $user->branch);
+            if ($role == 'Verifier' || $role == 'General Manager') {
+                $data->where('sold_unit.status', '0')->whereIn('sold_unit.approver', $approverIds);
+            } elseif ($role == 'Warehouse Custodian') {
+                $data->whereIn('sold_unit.status', ['0', '2'])->where('sold_unit.branch', $branch);
             }
 
             return Datatables::of($data)
@@ -1111,6 +1106,12 @@ class RequestApprovalController extends BaseController
                 return $this->sendError('There is already a pending approval for this unit.');
             }
 
+            $firstApproverId = $this->assignFirstApprover((int) $request->module_id);
+
+            if (!$firstApproverId) {
+                throw new \Exception("No approver found for this module.");
+            }
+
             if ($existing && $existing->status == 2) {
                 // Reuse disapproved → reset to pending
                 $existing->update([
@@ -1121,35 +1122,30 @@ class RequestApprovalController extends BaseController
                 ]);
 
                 receive_unit::where('id', $request->received_unit_id)
-                    ->update(['status' => 0]);
+                    ->update(['status' => 0, 'approver' => $firstApproverId]);
 
-                $approval = $existing;
             } else {
-                $create = RequestApproval::create($input);
-                $rec_id = $create->id;
+                $input =  $request->all();
+
+                $create = RequestApproval::create([
+                    'received_unit_id' => $input['received_unit_id'],
+                    'repo_id' => $input['repo_id'],
+                    'branch' => $input['branch'],
+                    'unit_age_days' => $input['unit_age_days'],
+                    'depreciation_cost' => $input['depreciation_cost'],
+                    'estimated_missing_dmg_parts' => $input['estimated_missing_dmg_parts'],
+                    'total_missing_dmg_parts' => $input['total_missing_dmg_parts'],
+                    'suggested_price' => $input['suggested_price'],
+                    'approved_price' => $input['approved_price'],
+                    'approver' => $firstApproverId,
+                    'status' => '0',
+                    'remarks' => $input['remarks'],
+                    'created_by' => Auth::id(),
+                ]);
 
                 $transactionNo = $this->generateTransactionNumber('rdaf', $create->created_at);
-                $create->rdaf_transaction_number = $transactionNo;
-                $create->save();
+                $create->update(['rdaf_transaction_number' => $transactionNo]);
             }
-
-            $matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $rec_id);
-
-            if ($matrix['status'] == 'error') {
-                return $matrix;
-            } else {
-                //update the first holder of the transaction
-                $save_holder = RequestApproval::where('id', $rec_id)->update(['approver' => $matrix['message']]);
-            }
-
-            // Assign first approver
-            $firstApproverId = $this->assignFirstApprover((int) $request->module_id);
-
-            if (!$firstApproverId) {
-                throw new \Exception("No approver found for this module.");
-            }
-
-            $approval->update(['approver' => $firstApproverId]);
 
             return $this->sendResponse([], 'Request for price appraisal successfully saved!');
         });
@@ -1222,7 +1218,7 @@ class RequestApprovalController extends BaseController
             }
 
             if ($request->status == 2) {
-                $this->logApproval($moduleId, $data->id, $userId, $roleId, $currentApprover->level, null);
+                $this->logApproval($moduleId, $data->id, $userId, $roleId, $currentApprover->level, 'D');
 
                 receive_unit::where('id', $recordId)
                     ->update(['status' => 2]);
@@ -1387,16 +1383,13 @@ class RequestApprovalController extends BaseController
 
                 $transactionNo = $this->generateTransactionNumber('sales', $create->created_at);
                 $create->transaction_number = $transactionNo;
+
+                $firstApproverId = $this->assignFirstApprover((int) $request->module_id);
+                if (!$firstApproverId) {
+                    throw new \Exception("No approver found for this module.");
+                }
+                $create->update([ 'approver' => $firstApproverId ]);
                 $create->save();
-            }
-
-            $matrix =  $this->ApprovalMatrixActivityLog($request->module_id, $rec_id);
-
-            if ($matrix['status'] == 'error') {
-                return $matrix;
-            } else {
-                //update the first holder of the transaction
-                $save_holder = sold_unit::where('id', $rec_id)->update(['approver' => $matrix['message']]);
             }
 
             DB::commit();
@@ -1425,40 +1418,65 @@ class RequestApprovalController extends BaseController
                 return $this->sendError('Validation Error.', $validator->errors());
             }
 
-            DB::beginTransaction();
-            $first_approver = 0;
-            $sequence = 0;
-            if ($request->status == 1) {
-                $fetch_sequence = $this->approverDecision($request->module_id, $request->id, Auth::user()->id);
-                if ($fetch_sequence == 0) {
-                    // $get_salesDetails = sold_unit::where('id', $request->id)->first();
+            $userId   = Auth::id();
+            $roleId   = user_role::where('user_role_name', Auth::user()->userrole)->value('id');
+            $moduleId = $request->module_id;
+            $recordId = $request->id;
 
-                    // $boolean = $this->create_customer($request->id);
-                    // if ($boolean) {
-                        receive_unit::where('repo_id', $request->repo_id)->update(['is_sold' => 'Y']);
-                        sold_unit::where('id', $request->id)->update([
-                            'status' => $request->status,
-                            'transaction_number_inventory_out' => $this->generateTransactionNumber('inventory_out', now()),
-                            'inventory_out_at' => now(),
-                        ]);
-                    // }
+            // ✅ check if already approved
+            $check = $this->checkIfApproved($moduleId, $recordId, $roleId);
+            if ($check['status']) {
+                $approverName = $check['name'] ?? 'Unknown Approver';
+                return $this->sendError(
+                    "This request has already been approved by {$approverName}.",
+                    ['approver' => $check['approver']]
+                );
+            }
+
+            DB::beginTransaction();
+
+            $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
+            $nextApproverId = null;
+
+            // ✅ Approval flow
+            if ($request->status == 1) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'A');
+
+                $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
+
+                if ($nextApprover) {
+                    $nextApproverId = $nextApprover->approverId;
+                } else {
+                    // no more approvers, mark record as fully approved
+                    receive_unit::where('repo_id', $request->repo_id)
+                        ->update(['is_sold' => 'Y']);
+
+                    sold_unit::where('id', $request->id)->update([
+                        'status' => $request->status,
+                        'transaction_number_inventory_out' => $this->generateTransactionNumber('inventory_out', now()),
+                        'inventory_out_at' => now(),
+                    ]);
                 }
-                $sequence = $fetch_sequence;
-            } else if ($request->status == 2) {
-                $fetch_first_approver = $this->disapprovedDecision($request->module_id, $request->id, Auth::user()->id);
-                sold_unit::where('id', $request->id)->update(['status' => $request->status, 'approver' => $fetch_first_approver]);
-                $first_approver = $fetch_first_approver;
+            }
+
+            if ($request->status == 2) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'D');
+
+                sold_unit::where('id', $request->id)
+                    ->update(['status' => $request->status]);
             }
 
             sold_unit::where('id', $request->id)
-            ->update([
-                'approver' => $first_approver > 0 ? $first_approver : ($sequence == 0 ? Auth::user()->id : $sequence),
-                'remarks' => $request->remarks
-            ]);
+                ->update([
+                    'approver' => $nextApproverId ?? $roleId,
+                    'remarks' => $request->remarks
+                ]);
 
             DB::commit();
 
-            $msg = $request->status == 1 ? 'Request for approval successfully approved!' : 'Request for approval successfully disapproved!';
+            $msg = $request->status == 1
+                ? 'Request for approval successfully approved!'
+                : 'Request for approval successfully disapproved!';
             return $this->sendResponse([], $msg);
         } catch (\Throwable $th) {
             $this->rollBaclDecision($request->module_id, $request->id, Auth::user()->id);

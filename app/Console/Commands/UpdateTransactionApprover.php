@@ -2,17 +2,21 @@
 
 namespace App\Console\Commands;
 
-use App\Models\approval_activity_log;
-use App\Models\receive_unit;
-use App\Models\refurbishProcess;
-use App\Models\request_refurbish;
-use App\Models\RequestApproval;
-use App\Models\sold_unit;
-use App\Models\stock_transfer;
-use App\Models\User;
+
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+
+use App\Enums\ApprovableModule;
+
+use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
+use App\Models\receive_unit AS ReceivedUnit;
+use App\Models\refurbishProcess;
+use App\Models\request_refurbish AS RequestRefurbish;
+use App\Models\RequestApproval;
+use App\Models\sold_unit AS SoldUnit;
+use App\Models\stock_transfer AS StockTransfer;
+use App\Models\PhysicalInventoryDoc AS PhysicalInventory;
 
 class UpdateTransactionApprover extends Command
 {
@@ -31,227 +35,157 @@ class UpdateTransactionApprover extends Command
     protected $description = 'Update approval_activity_logs to use role-based approvers instead of user-based';
 
     /**
+     * @var array<int, array{model: string, reset?: bool}>
+     *
+     */
+    protected array $handlers = [
+        ApprovableModule::REPO_TAGGING              => ['model' => ReceivedUnit::class, 'reset' => true],
+        ApprovableModule::STOCK_TRANSFER            => ['model' => StockTransfer::class],
+        ApprovableModule::REQUEST_PRICE_APPRAISAL   => ['model' => RequestApproval::class],
+        ApprovableModule::REQUEST_REFURBISHMENT     => ['model' => RequestRefurbish::class],
+        ApprovableModule::SETTLE_REFERBISHMENT      => ['model' => refurbishProcess::class],
+        ApprovableModule::SALES_TAGGING             => ['model' => SoldUnit::class],
+        ApprovableModule::PHYSICAL_INVENTORY        => ['model' => PhysicalInventory::class],
+    ];
+
+    /**
      * Execute the console command.
      *
      * @return int
      */
-    public function handle()
+    public function handle(): int
     {
         $moduleId = (int) $this->argument('moduleId');
 
-        // menu have approval
-        $modules = DB::table('system_menu')
-            ->whereIn('id', function ($query) {
-                $query->select(DB::raw('DISTINCT module_id'))
-                    ->from('approval_matrix_settings');
+        if (!$this->isValidModule($moduleId)) {
+            $this->error("Module ID {$moduleId} not found or inactive.");
+            return self::FAILURE;
+        }
+
+        if (!isset($this->handlers[$moduleId])) {
+            $this->warn("No handler implemented for module ID: {$moduleId}");
+            Log::warning("No handler defined for module ID: {$moduleId}");
+            return self::SUCCESS;
+        }
+
+        $handler = $this->handlers[$moduleId];
+        $modelClass = $handler['model'];
+        $reset = $handler['reset'] ?? false;
+
+        $this->processModuleRecords($moduleId, $modelClass, $reset);
+
+        $this->info("✅ Done processing module ID {$moduleId}.");
+        return self::SUCCESS;
+    }
+
+    /**
+     * Validate if the module exists and is active
+     */
+    protected function isValidModule(int $moduleId): bool
+    {
+        return DB::table('system_menu')
+            ->whereIn('id', function ($q) {
+                $q->select(DB::raw('DISTINCT module_id'))
+                  ->from('approval_matrix_settings');
             })
             ->where('status', 1)
             ->whereNotIn('id', [22, 24, 29])
-            ->get();
-
-        $validModule = $modules->firstWhere('id', $moduleId);
-
-        if (!$validModule) {
-            $this->error("Module ID {$moduleId} not found in approval_matrix_settings or is inactive.");
-            return Command::FAILURE;
-        }
-
-        $this->info("Processing module: {$validModule->menu_name} (ID: {$validModule->id})");
-
-        // Call specific handler
-        switch ($moduleId) {
-            case 25:
-                $this->handleRepoTagging();
-                break;
-            case 5:
-                $this->handleStockTransfer();
-                break;
-            case 6:
-                $this->handleRequestPriceAppraisal();
-                break;
-            case 23:
-                $this->handleRequestRefurbish();
-                break;
-            case 26:
-                $this->handleSettleRefurbish();
-                break;
-            case 19:
-                $this->handleSoldUnit();
-                break;
-            default:
-                Log::warning("No handler defined for module ID: {$moduleId} - {$validModule->menu_name}");
-                $this->warn("No handler implemented for module ID: {$moduleId}");
-                break;
-        }
-
-        $this->info("Done.");
-        return Command::SUCCESS;
+            ->where('id', $moduleId)
+            ->exists();
     }
 
-    public function getApproverRole($ids)
+    /**
+     * Fetch approver logs grouped by rec_id
+     */
+    protected function getApproverLogged(int $moduleId, array $ids)
     {
-        return DB::table('users')
-            ->select(
-                DB::raw("users.id AS user_id"),
-                DB::raw("roles.id AS role_id")
-            )
-            ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
-            ->whereIn('users.id', $ids)
-            ->get();
+        if (empty($ids)) return collect();
+
+        $idList = implode(',', array_map('intval', $ids));
+
+        $sql = "
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY rec_id, user_id ORDER BY id DESC) AS rn
+            FROM approval_activity_logs
+            WHERE module_id = ? AND decision = 'A' AND rec_id IN ($idList)
+            ORDER BY id
+        ";
+
+        return collect(DB::select($sql, [$moduleId]))->groupBy('rec_id');
     }
 
-    public function handleRepoTagging()
+    /**
+     * ✅ Get default approver role for module
+     */
+    protected function getDefaultRole(int $moduleId): ?int
     {
-        $repos = receive_unit::all();
+        $matrix = ApprovalMatrixSetting::query()
+            ->where('module_id', $moduleId)
+            ->orderBy('level', 'asc')
+            ->first();
 
-        if ($repos->isEmpty()) {
-            $this->warn("No records found for Repo Tagging.");
+        if (!$matrix) return null;
+
+        $signatories = json_decode($matrix->signatories, true);
+        return $signatories[0]['role'] ?? null;
+    }
+
+    /**
+     * Reusable module processing logic
+     */
+    protected function processModuleRecords(int $moduleId, string $modelClass, bool $resetStatus = false): void
+    {
+        $moduleName = ApprovableModule::labels()[$moduleId] ?? "Module {$moduleId}";
+        Log::info("=== [{$moduleName}] Process started for module ID {$moduleId} ===");
+
+        // Fetch records
+        $records = $modelClass::all(['id', 'approver', 'status']);
+        $count = $records->count();
+        Log::info("Found {$count} records for {$moduleName}.");
+
+        if ($count === 0) {
+            $this->warn("No records found for {$moduleName}.");
             return;
         }
 
-        $ids = $repos->pluck('approver')->unique();
-        $approvers = $this->getApproverRole($ids)->keyBy('user_id');
+        // Optional: Reset status (e.g., for repo tagging)
+        if ($resetStatus) {
+            $affected = $modelClass::query()
+                ->where('status', '!=', 4)
+                ->update(['status' => 1]);
+            Log::info("Reset status to 1 for {$affected} records (excluding status = 4).");
+        }
 
-        foreach ($repos as $record) {
-            $approver = $approvers->get($record->approver);
+        $ids = $records->pluck('id')->all();
+        $logsByRecId = $this->getApproverLogged($moduleId, $ids);
+        $defaultRole = $this->getDefaultRole($moduleId);
 
-            if ($approver) {
-                $record->approver = $approver->role_id;
-                $record->save();
-                $this->info("Updated approver for record ID: {$record->id} => Role ID: {$approver->role_id}");
+        if (!$defaultRole) {
+            $this->warn("No approval matrix found for module ID {$moduleId}");
+            Log::warning("No approval matrix found for module ID {$moduleId}");
+        }
+
+        foreach ($records as $record) {
+            $logsForRecord = $logsByRecId->get($record->id);
+
+            if ($logsForRecord && $logsForRecord->isNotEmpty()) {
+                $lastLog = $logsForRecord->sortByDesc('id')->first();
+
+                // Optional: only update active status (1)
+                if ($resetStatus || $record->status == 1) {
+                    $record->update(['approver' => $lastLog->user_id]);
+                    Log::info("Record {$record->id}: approver updated to {$lastLog->user_id} (log ID {$lastLog->id}).");
+                    continue;
+                }
+            }
+
+            if ($defaultRole) {
+                $record->update(['approver' => $defaultRole]);
+                Log::info("Record {$record->id}: default approver role {$defaultRole} applied.");
             } else {
-                $this->warn("No approver found for Repo Tagging ID: {$record->id}");
+                Log::warning("Record {$record->id}: No log found and no default role available.");
             }
         }
-    }
 
-    public function handleStockTransfer()
-    {
-        $transfers = stock_transfer::all();
-
-        if ($transfers->isEmpty()) {
-            $this->warn("No records found for Stock Transfers.");
-            return;
-        }
-
-        $ids = $transfers->pluck('approver');
-        $approvers = $this->getApproverRole($ids)->keyBy('user_id');
-
-        foreach ($transfers as $record) {
-            $approver = $approvers->get($record->approver);
-
-            if ($approver) {
-                $record->approver = $approver->role_id;
-                $record->save();
-
-                $this->info("Updated Stock Transfer ID {$record->id} with approver {$approver->role_id}");
-            } else {
-                $this->warn("No approver found for Stock Transfer ID {$record->id}");
-            }
-        }
-    }
-
-    public function handleRequestPriceAppraisal()
-    {
-        $appraisal = RequestApproval::all();
-
-        if ($appraisal->isEmpty()) {
-            $this->warn("No records found for Request Price Appraisal.");
-            return;
-        }
-
-        $ids = $appraisal->pluck('approver');
-        $approvers = $this->getApproverRole($ids)->keyBy('user_id');
-
-        foreach ($appraisal as $record) {
-            $approver = $approvers->get($record->approver);
-
-            if ($approver) {
-                $record->approver = $approver->role_id;
-                $record->save();
-
-                $this->info("Updated Request Price Appraisal ID {$record->id} with approver {$approver->role_id}");
-            } else {
-                $this->warn("No approver found for Request Price Appraisal ID {$record->id}");
-            }
-        }
-    }
-
-    public function handleRequestRefurbish()
-    {
-        $refurbish = request_refurbish::all();
-
-        if ($refurbish->isEmpty()) {
-            $this->warn("No records found for Request Refurbish.");
-            return;
-        }
-
-        $ids = $refurbish->pluck('approver');
-        $approvers = $this->getApproverRole($ids)->keyBy('user_id');
-
-        foreach ($refurbish as $record) {
-            $approver = $approvers->get($record->approver);
-
-            if ($approver) {
-                $record->approver = $approver->role_id;
-                $record->save();
-
-                $this->info("Updated Request Refurbish ID {$record->id} with approver {$approver->role_id}");
-            } else {
-                $this->warn("No approver found for Request Refurbish ID {$record->id}");
-            }
-        }
-    }
-
-    public function handleSettleRefurbish()
-    {
-        $settle = refurbishProcess::all();
-
-        if ($settle->isEmpty()) {
-            $this->warn("No records found for Settle Refurbish.");
-            return;
-        }
-
-        $ids = $settle->pluck('approver');
-        $approvers = $this->getApproverRole($ids)->keyBy('user_id');
-
-        foreach ($settle as $record) {
-            $approver = $approvers->get($record->approver);
-
-            if ($approver) {
-                $record->approver = $approver->role_id;
-                $record->save();
-
-                $this->info("Updated Settle Refurbish ID {$record->id} with approver {$approver->role_id}");
-            } else {
-                $this->warn("No approver found for Settle Refurbish ID {$record->id}");
-            }
-        }
-    }
-
-    public function handleSoldUnit()
-    {
-        $sold = sold_unit::all();
-
-        if ($sold->isEmpty()) {
-            $this->warn("No records found for Sold Unit.");
-            return;
-        }
-
-        $ids = $sold->pluck('approver');
-        $approvers = $this->getApproverRole($ids)->keyBy('user_id');
-
-        foreach ($sold as $record) {
-            $approver = $approvers->get($record->approver);
-
-            if ($approver) {
-                $record->approver = $approver->role_id;
-                $record->save();
-
-                $this->info("Updated Sold Unit ID {$record->id} with approver {$approver->role_id}");
-            } else {
-                $this->warn("No approver found for Sold Unit ID {$record->id}");
-            }
-        }
+        Log::info("=== [{$moduleName}] Process completed for module ID {$moduleId} ===");
     }
 }

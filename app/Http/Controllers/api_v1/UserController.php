@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
-use App\Models\approval_matrix_setting;
+use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
 use App\Models\user_role;
 use App\Models\system_menu;
 use App\Http\Traits\ResuableQuery;
@@ -122,11 +122,10 @@ class UserController extends BaseController
 	public function users()
 	{
 		try {
-
-
 			$query = DB::table('users as a')
 				->leftjoin('branches as b', 'b.id', 'a.branch')
-				->select('a.*', 'b.name as branch_name')
+				->leftjoin('user_role as c', 'a.userrole', 'c.user_role_name')
+				->select('a.*', 'b.name as branch_name', 'c.id as role_id')
 				->where('a.id', '!=', '1')
 				->get();
 
@@ -207,65 +206,45 @@ class UserController extends BaseController
 	}
 
 	public function createApprovalMatrix(Request $request)
-	{
-		try {
-			DB::beginTransaction();
+    {
+        try {
+            DB::beginTransaction();
 
-            $moduleId = $request->data[0]['module_id'];
+            $moduleId = $request->module;
+            $matrix   = is_string($request->matrix)
+                ? json_decode($request->matrix, true)
+                : $request->matrix;
 
             if (!in_array($moduleId, ApprovableModule::values())) {
                 return $this->sendError('Validation Error.', 'This module does not require approvers.');
             }
 
-            $existingApprovers = approval_matrix_setting::where('module_id', $moduleId)->get();
-            $level = $existingApprovers->max('level');
+            $existingApprovers = ApprovalMatrixSetting::where('module_id', $moduleId)->get();
+            $currentLevel = $existingApprovers->max('level') ?? 0;
 
-            foreach ($request->data as $input) {
-                $validator = Validator::make($input, [
-                    'module_id'   => 'required',
-                    'level'       => 'required|integer',
-                    'signatories' => 'required|array|min:1',
+            foreach ($matrix as $signatories) {
+                $currentLevel++;
+                ApprovalMatrixSetting::create([
+                    'module_id'   => $moduleId,
+                    'level'       => $currentLevel,
+                    'signatories' => json_decode(json_encode($signatories, JSON_UNESCAPED_UNICODE)),
                 ]);
-
-                if ($validator->fails()) {
-                    return $this->sendError('Validation Error.', $validator->errors());
-                }
-
-                // ✅ Adjust level based on existing matrix
-                foreach ($existingApprovers as $list) {
-                    if ($level > 0) {
-                        $input['level'] = $list->level + $input['level'];
-                    }
-
-                    // ✅ Prevent duplicate approvers
-                    foreach ($list->signatories as $approver) {
-                        foreach ($input['signatories'] as $reqApprover) {
-                            if ($reqApprover['user'] == $approver['user']) {
-                                return $this->sendError(
-                                    'Validation Error.',
-                                    "This signatory ({$reqApprover['user']}) already exists in this module!"
-                                );
-                            }
-                        }
-                    }
-                }
-
-                approval_matrix_setting::create($input);
             }
 
-            $finalCount = approval_matrix_setting::where('module_id', $moduleId)->count();
+            $finalCount = ApprovalMatrixSetting::where('module_id', $moduleId)->count();
             if ($finalCount === 0) {
                 DB::rollBack();
                 return $this->sendError('Validation Error.', 'At least one approver must remain for this module.');
             }
 
-			DB::commit();
+            DB::commit();
 
-			return $this->sendResponse([], 'success');
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+            return $this->sendResponse([], 'Approval matrix saved successfully.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError('Error', $th->getMessage());
+        }
+    }
 
 	public function currentModule($page)
 	{
@@ -337,7 +316,7 @@ class UserController extends BaseController
 		try {
             DB::beginTransaction();
 
-            $matrix = approval_matrix_setting::find($id);
+            $matrix = ApprovalMatrixSetting::find($id);
 
             if (!$matrix) {
                 return $this->sendError("Approval matrix with ID {$id} does not exist.");
@@ -346,7 +325,7 @@ class UserController extends BaseController
             $moduleId = $matrix->module_id;
 
             if (in_array($moduleId, ApprovableModule::values())) {
-                $totalApprovers = approval_matrix_setting::where('module_id', $moduleId)->count();
+                $totalApprovers = ApprovalMatrixSetting::where('module_id', $moduleId)->count();
 
                 if ($totalApprovers <= 1) {
                     return $this->sendError(
@@ -367,42 +346,19 @@ class UserController extends BaseController
 	}
 
 	public function approverByPage($moduleid)
-	{
+    {
+        try {
+            $approvers = ApprovalMatrixSetting::query()
+                ->select('id', 'module_id', 'level', 'signatories')
+                ->where('module_id', $moduleid)
+                ->orderBy('level')
+                ->get();
 
-		try {
-
-			$roles = array();
-			$users = array();
-			$raw = array();
-			$approvers = approval_matrix_setting::where('module_id', $moduleid)->get();
-			foreach ($approvers as $key => $list) {
-				foreach ($list->signatories as $approver) {
-					array_push($roles, $approver['user']);
-					array_push($raw, ['approver' => $approver['user'], 'level' => $key + 1, 'rec_id' => $list->id]);
-				}
-			}
-
-			$final_data = [];
-
-			// $get_approvers = User::select('id', 'firstname', 'middlename', 'lastname')->whereIn('id', $users)->get();
-			$get_approvers = user_role::select('id', 'user_role_name')->whereIn('id', $roles)->get();
-			foreach ($get_approvers as $approver) {
-				foreach ($raw as $data) {
-					if ($approver->id == $data['approver']) {
-						array_push($final_data, [
-							'id' => $data['rec_id'],
-							'name' => $approver->user_role_name,
-							'level' => $data['level']
-						]);
-					}
-				}
-			}
-
-			return $final_data;
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+            return response()->json($approvers);
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	public function getAllNotification()
 	{
@@ -419,17 +375,13 @@ class UserController extends BaseController
         $cteQuery = $this->cteQuery();
         $stmt = DB::select("
             DECLARE @approverId INT = :approverId, @makerId INT = :makerId, @branchId INT = :branchId;
-            {$cteQuery}
 
-            SELECT * FROM (
+            SELECT notif.*,
+            CASE WHEN approver.approver_user_id = @approverId THEN 'Approver' ELSE 'Maker' END AS roles
+            FROM (
                 SELECT
                     'Repo request price' AS module, rud.id, rud.status, req.approver, CONCAT(usr.firstname,' ',usr.lastname) AS requestor,
                     req.created_by AS maker, '_approval-unit.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 6 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     6 AS module_id
                 FROM recieve_unit_details rud
                 INNER JOIN request_approvals req ON req.received_unit_id = rud.id
@@ -440,11 +392,6 @@ class UserController extends BaseController
                 SELECT
                     'Repo request refurbish' as module, req.id, req.status, req.approver, CONCAT(usr.firstname,' ',usr.lastname) as requestor,
                     req.maker, '_refurbish-unit.php' as link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 23 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     23 AS module_id
                 FROM request_refurbishes req
                 INNER JOIN users usr on usr.id = req.maker
@@ -454,11 +401,6 @@ class UserController extends BaseController
                 SELECT
                     'Sales approval' as module, sold.id, sold.status, sold.approver, CONCAT(usr.firstname,' ',usr.lastname) as requestor,
                     sold.maker, '_sales-tagging.php' as link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 19 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     19 AS module_id
                 FROM sold_units sold
                 INNER JOIN users usr on usr.id = sold.maker
@@ -468,11 +410,6 @@ class UserController extends BaseController
                 SELECT
                     'Stock Transfer' as module, sta.id, sta.status, sta.approver, CONCAT(usr.firstname,' ', usr.lastname) AS requestor,
                     sta.created_by, '_stock_transfer.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 5 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     5 AS module_id
                 FROM stock_transfer_approval sta
                 INNER JOIN users usr ON usr.id = sta.created_by
@@ -482,11 +419,6 @@ class UserController extends BaseController
                 SELECT
                     'Settle Refurbishment' as module, sta.id, sta.status, sta.approver, CONCAT(usr.firstname,' ', usr.lastname) AS requestor,
                     sta.maker AS created_by, '_refurbish-process.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 26 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     26 AS module_id
                 FROM refurbish_processes sta
                 INNER JOIN users usr ON usr.id = sta.maker
@@ -497,11 +429,6 @@ class UserController extends BaseController
                     'Received Stock Transfer' as module, stu1.id, stu1.is_received AS [status],
                     (CASE WHEN sta1.status = 1 THEN sta1.to_branch WHEN sta1.status = 2 THEN sta1.from_branch END) AS approver,
                     CONCAT(usr.firstname,' ', usr.lastname) as requestor, sta1.created_by, '_stock_transfer_received.php' as link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 22 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     22 AS module_id
                 FROM (
                     SELECT MAX(sta.id) AS approvalid, MAX(stu.recieved_unit_id) AS recievedid, MAX(stu.id) AS unitid
@@ -521,11 +448,6 @@ class UserController extends BaseController
                 SELECT
                     'Repo Tagging' as module, repo.id, CASE WHEN received.status = 4 THEN 0 ELSE 0 END AS status, received.approver,
                     CONCAT(usr.firstname,' ', usr.lastname) as requestor, branch.id AS created_by, 'repo_tagging_approval.php' as link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 25 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     25 AS module_id
                 FROM  repo_details repo
                 INNER JOIN recieve_unit_details received on repo.id = received.repo_id
@@ -538,29 +460,31 @@ class UserController extends BaseController
                 SELECT
                     'For Settle Refurbishment' as module, req.id, CASE WHEN req.[status] = 3 THEN 0 ELSE req.[status] END AS [status],
                     req.branch AS approver, CONCAT(usr.firstname,' ',usr.lastname) AS requestor, req.maker, '_refurbish-process.php' as link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 26 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     26 AS module_id
                 FROM request_refurbishes req
                 INNER JOIN users usr ON usr.id = req.maker
                 WHERE req.status = 3
             ) AS notif
+            LEFT JOIN (
+                SELECT
+                    ams.module_id,
+                    JSON_VALUE(ams.signatories, '$[0].role') AS approver_role_id,
+                    usersList.[id] AS approver_user_id
+                FROM approval_matrix_settings AS ams
+                CROSS APPLY OPENJSON(JSON_QUERY(ams.signatories, '$[0].users'))
+                WITH (
+                    id INT '$.id'
+                ) AS usersList
+            ) approver ON notif.module_id = approver.module_id AND approver.approver_user_id = @approverId
             WHERE notif.status = 0 AND CAST(notif.approver AS INT) = CAST((CASE WHEN notif.module IN ('Received Stock Transfer', 'For Settle Refurbishment') THEN @branchId ELSE @approverId END) AS INT)
 
             UNION ALL
 
-            SELECT * FROM (
+            SELECT disapprove.*, CASE WHEN approver.approver_user_id = @approverId THEN 'Approver' ELSE 'Maker' END AS roles
+            FROM (
                 SELECT
                     'Repo request price' AS module, rud.id, rud.status, req.approver, CONCAT(usr.firstname,' ',usr.lastname) AS requestor,
                     req.created_by AS maker,'_approval-unit.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 6 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     6 AS module_id
                 FROM recieve_unit_details rud
                 INNER JOIN request_approvals req ON req.received_unit_id = rud.id
@@ -571,11 +495,6 @@ class UserController extends BaseController
                 SELECT
                     'Repo request refurbish' AS module, req.id, req.status, req.approver, CONCAT(usr.firstname,' ',usr.lastname) AS requestor,
                     req.maker, '_refurbish-unit.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 23 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     23 AS module_id
                 FROM request_refurbishes req
                 INNER JOIN users usr ON usr.id = req.approver
@@ -585,11 +504,6 @@ class UserController extends BaseController
                 SELECT
                     'Sales approval' AS module, sold.id, sold.status, sold.approver, CONCAT(usr.firstname,' ',usr.lastname) AS requestor,
                     sold.maker, '_sales-tagging.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 19 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     19 AS module_id
                 FROM sold_units sold
                 INNER JOIN users usr ON usr.id = sold.approver
@@ -599,11 +513,6 @@ class UserController extends BaseController
                 SELECT
                     'Settle Refurbishment' AS module, sta.id, sta.status, sta.approver, CONCAT(usr.firstname,' ', usr.lastname) AS requestor,
                     sta.maker AS created_by, '_refurbish-process.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 26 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     26 AS module_id
                 FROM refurbish_processes sta
                 INNER JOIN users usr ON usr.id = sta.maker
@@ -613,18 +522,23 @@ class UserController extends BaseController
                 SELECT
                     'Stock Transfer' AS module, sta.id, sta.status, sta.approver, CONCAT(usr.firstname,' ', usr.lastname) AS requestor,
                     sta.created_by, '_stock_transfer.php' AS link,
-
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = 5 AND approverId = @approverId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles,
                     5 AS module_id
                 FROM stock_transfer_approval sta
                 INNER JOIN users usr ON usr.id = sta.created_by
 
             ) AS disapprove
-            WHERE disapprove.status = 2 AND disapprove.maker = @makerId
-            ",
+            LEFT JOIN (
+                SELECT
+                    ams.module_id,
+                    JSON_VALUE(ams.signatories, '$[0].role') AS approver_role_id,
+                    usersList.[id] AS approver_user_id
+                FROM approval_matrix_settings AS ams
+                CROSS APPLY OPENJSON(JSON_QUERY(ams.signatories, '$[0].users'))
+                WITH (
+                    id INT '$.id'
+                ) AS usersList
+            ) approver ON disapprove.module_id = approver.module_id AND approver.approver_user_id = @approverId
+            WHERE disapprove.status = 2 AND disapprove.maker = @makerId",
             [
                 'approverId' => $user->role_id,
                 'makerId' => $user->user_id,

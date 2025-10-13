@@ -13,6 +13,7 @@ use App\Models\refurbish_detail;
 use App\Models\refurbishProcess;
 use App\Models\repo AS RepoDetails;
 use App\Models\user_role;
+use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
 use Illuminate\Http\Request;
 use App\Http\Traits\helper;
 use App\Http\Traits\ResuableQuery;
@@ -493,53 +494,43 @@ class RequestRefurbishController extends BaseController
 	public function getListForApprovalRefurbish($moduleId)
 	{
 		try {
-            $authUser = Auth::user();
+            $user = Auth::user();
+            $id = $user->id;
+            $role = $user->userrole;
+            $branch = $user->branch;
 
-            $user = DB::table('users')
-                ->select('users.id as user_id', 'roles.id as role_id')
-                ->join('user_role as roles', 'users.userrole', '=', 'roles.user_role_name')
-                ->where('users.id', $authUser->id)
-                ->first();
+            $users = ApprovalMatrixSetting::getApprovalMatrix($moduleId, $role);
 
-            if (!$user) {
-                return $this->sendError('User role not found.');
+            $userRow = collect($users)->first();
+
+            if (! $userRow && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
             }
 
-            $cteQuery = $this->cteQuery();
+            $approverRoleId = $userRow->approver_role_id ?? null;
+            $approverUsersRaw = $userRow->approver_users ?? '[]';
+            $decoded = json_decode($approverUsersRaw, true);
+            $userIds = collect($decoded)->pluck('id')->all();
+            $currentUserId = Auth::id();
 
-            $roleResult = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId;
-                {$cteQuery}
-                SELECT
-                    CASE
-                        WHEN (SELECT COUNT(DISTINCT approverId)
-                            FROM approvers
-                            WHERE module_id = @module
-                                AND approverId = @roleId) = 1
-                        THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS role_name
-            ", [
-                'module' => $moduleId,
-                'userId' => $user->user_id,
-                'roleId' => $user->role_id,
-            ]);
+            if (! in_array($currentUserId, $userIds) && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
 
-            $userRole = $roleResult[0]->role_name ?? 'Maker';
+            $approverIds = is_array($approverRoleId) ? $approverRoleId : [$approverRoleId];
 
-			// Build base query
             $query = DB::table('repo_details as repo')
                 ->join('recieve_unit_details as rud', 'repo.id', '=', 'rud.repo_id')
                 ->join('request_refurbishes as refurbish', function ($join) {
                     $join->on('repo.id', '=', 'refurbish.repo_id')
                         ->on('repo.branch_id', '=', 'refurbish.branch');
                 })
-                ->join('branches as br', 'repo.branch_id', '=', 'br.id')
-                ->join('brands as brd', 'repo.brand_id', '=', 'brd.id')
-                ->join('unit_models as mdl', 'repo.model_id', '=', 'mdl.id')
-                ->join('unit_colors as color', 'repo.color_id', '=', 'color.id')
-                ->join('user_role as holder', 'refurbish.approver', '=', 'holder.id')
-                ->join('users as req', 'refurbish.maker', '=', 'req.id')
+                ->leftJoin('branches as br', 'repo.branch_id', '=', 'br.id')
+                ->leftJoin('brands as brd', 'repo.brand_id', '=', 'brd.id')
+                ->leftJoin('unit_models as mdl', 'repo.model_id', '=', 'mdl.id')
+                ->leftJoin('unit_colors as color', 'repo.color_id', '=', 'color.id')
+                ->leftJoin('user_role as holder', 'refurbish.approver', '=', 'holder.id')
+                ->leftJoin('users as req', 'refurbish.maker', '=', 'req.id')
                 ->select(
                     'refurbish.id as refurbish_id',
                     'refurbish.files_names as qoute',
@@ -567,23 +558,13 @@ class RequestRefurbishController extends BaseController
                 ->where('rud.status', '!=', 4)
                 ->where('rud.is_sold', 'N');
 
-            // Apply role-based filters
-            if ($userRole === 'Approver') {
-                $query->where('refurbish.status', '0')
-                    ->whereIn('refurbish.approver', [$user->role_id]);
+
+            if ($role != 'Warehouse Custodian') {
+                $query->whereIn('refurbish.approver', $approverIds);
                 Log::info('Filter applied for Approver.');
             } else {
-                $check = DB::table('request_refurbishes')
-                    ->where('maker', $user->user_id)
-                    ->count();
-
-                Log::info('Maker request count: ' . $check);
-
-                if ($check > 0) {
-                    $query->where('refurbish.maker', $user->user_id);
-                } else {
-                    $query->whereIn('refurbish.status', ['0', '2']);
-                }
+                Log::info('Filter applied for Warehouse Custodian. Branch: ' . $branch);
+                $query->where('refurbish.branch', $branch);
             }
 
             return Datatables::of($query)
@@ -601,33 +582,32 @@ class RequestRefurbishController extends BaseController
 	public function listForRefurbishProcess($moduleid)
 	{
 		try {
-            $auth = Auth::user();
-            $user = DB::table('users')
-                ->select(
-                    DB::raw("users.branch AS branch_id"),
-                    DB::raw("users.id AS user_id"),
-                    DB::raw("roles.id AS role_id")
-                )
-                ->join('user_role as roles', 'users.userrole', 'roles.user_role_name')
-                ->where('users.id', $auth->id)
-                ->first();
+            $user = Auth::user();
+            $id = $user->id;
+            $role = $user->userrole;
+            $branch = $user->branch;
+
+            $users = ApprovalMatrixSetting::getApprovalMatrix($moduleid, $role);
+
+            $userRow = collect($users)->first();
+
+            if (! $userRow && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverRoleId = $userRow->approver_role_id ?? null;
+            $approverUsersRaw = $userRow->approver_users ?? '[]';
+            $decoded = json_decode($approverUsersRaw, true);
+            $userIds = collect($decoded)->pluck('id')->all();
+            $currentUserId = Auth::id();
+
+            if (! in_array($currentUserId, $userIds) && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverIds = is_array($approverRoleId) ? $approverRoleId : [$approverRoleId];
 
             $cteQuery = $this->cteQuery();
-
-            $role = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId, @roleId INT = :roleId;
-                {$cteQuery}
-
-                SELECT
-                    CASE (SELECT COUNT(DISTINCT approverId) FROM approvers WHERE module_id = @module AND approverId = @roleId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles
-                ",
-                [ 'module' => $moduleid, 'userId' => $user->user_id, 'roleId' => $user->role_id ]
-            );
-
-            $userRole = $role[0]->roles ?? 'Maker';
 
             $stmt = DB::select("
                 DECLARE @role NVARCHAR(10) = :role, @userId INT = :userId, @roleId INT = :roleId, @branchId INT = :branchId;
@@ -676,15 +656,15 @@ class RequestRefurbishController extends BaseController
                 LEFT JOIN defineClassification defineClass ON repo.id = defineClass.repo_id
                 WHERE (
                     (
-                        @role = 'Approver' AND process.status = 0 AND process.approver IN (@userId, @roleId)
+                        @role != 'Warehouse Custodian' AND process.status = 0 AND process.approver IN (@roleId)
                     )
                     OR
                     (
-                        @role = 'Maker' AND refurbish.status = 3 AND refurbish.branch = @branchId
+                        @role = 'Warehouse Custodian' AND refurbish.status = 3 AND refurbish.branch = @branchId
                     )
                 )
                 ",
-                [ 'role' => $userRole, 'userId' => $user->user_id, 'roleId' => $user->role_id, 'branchId' => $user->branch_id ]
+                [ 'role' => $role, 'userId' => $user->user_id, 'roleId' => $approverRoleId, 'branchId' => $branch ]
             );
             $datatables = Datatables::of($stmt);
 
@@ -747,7 +727,7 @@ class RequestRefurbishController extends BaseController
 
             // ✅ Disapproval flow
             if ($request->status == 2) {
-                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, null);
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'D');
 
                 request_refurbish::where('id', $recordId)->update([
                     'status'   => 2,
@@ -853,7 +833,7 @@ class RequestRefurbishController extends BaseController
             }
 
             if ($request->status == 2) {
-                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, null);
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'D');
 
                 $process->update([
                     'status'   => 2,

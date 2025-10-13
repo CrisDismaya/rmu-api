@@ -16,7 +16,7 @@ trait ApprovalSequence
     {
         return ApprovalMatrixSetting::forApprover()
             ->where('module_id', $moduleId)
-            ->orderBy('id', 'asc')   // assuming "sequence" column exists
+            ->orderBy('level', 'asc')
             ->get();
     }
 
@@ -36,8 +36,8 @@ trait ApprovalSequence
     {
         return ApprovalMatrixSetting::forApprover()
             ->where('module_id', $moduleId)
-            ->whereRaw("JSON_VALUE(signatories, '$[0].user') = ?", [$roleId])
-            ->orderBy('id', 'asc')
+            ->whereRaw("JSON_VALUE(signatories, '$[0].role') = ?", [$roleId])
+            ->orderBy('level', 'asc')
             ->first();
     }
 
@@ -46,7 +46,7 @@ trait ApprovalSequence
      */
     public function getNextApprover(int $moduleId, int $currentLevel)
     {
-        return ApprovalMatrixSetting::forApprover()
+        $approver = ApprovalMatrixSetting::forApprover()
             ->where('module_id', $moduleId)
             ->where('level', '>', function ($query) use ($moduleId, $currentLevel) {
                 $query->select('level')
@@ -57,6 +57,8 @@ trait ApprovalSequence
             })
             ->orderBy('level', 'asc')
             ->first();
+
+        return $approver ? $approver : null;
     }
 
     /**
@@ -86,6 +88,6 @@ trait ApprovalSequence
             return null;
         }
 
-        return $approver->approverId;
+        return $approver->approver_role_id;
     }
 }
