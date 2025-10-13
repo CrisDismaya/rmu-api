@@ -15,7 +15,7 @@ use App\Models\FilesUploaded;
 use App\Models\stock_transfer;
 use App\Models\stock_transfer_units;
 use App\Models\user_role;
-use App\Models\approval_matrix_setting;
+use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
 use App\Http\Traits\helper;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Facades\Log;
@@ -107,6 +107,26 @@ class StockTransferContoller extends BaseController
             $role = $user->userrole;
             $branch = $user->branch;
 
+            $users = ApprovalMatrixSetting::getApprovalMatrix($moduleid, $role);
+
+            $userRow = collect($users)->first();
+
+            if (! $userRow && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverRoleId = $userRow->approver_role_id ?? null;
+            $approverUsersRaw = $userRow->approver_users ?? '[]';
+            $decoded = json_decode($approverUsersRaw, true);
+            $userIds = collect($decoded)->pluck('id')->all();
+            $currentUserId = Auth::id();
+
+            if (! in_array($currentUserId, $userIds) && $role != 'Warehouse Custodian') {
+                return DataTables::of(collect())->make(true);
+            }
+
+            $approverIds = is_array($approverRoleId) ? $approverRoleId : [$approverRoleId];
+
             $query = DB::table('stock_transfer_approval as sta')
                 ->leftJoin('users as usr', 'sta.created_by', '=', 'usr.id')
                 ->select(
@@ -125,15 +145,7 @@ class StockTransferContoller extends BaseController
                 );
 
             if ($role == 'Verifier' || $role == 'General Manager') {
-                $query->where(function ($q) use ($id) {
-                    $q->where('sta.approver', function ($subQuery) use ($id) {
-                        $subQuery->select('roles.id')
-                            ->from('users')
-                            ->join('user_role as roles', 'users.userrole', '=', 'roles.user_role_name')
-                            ->where('users.id', $id)
-                            ->limit(1);
-                    });
-                });
+                $query->whereIn('sta.approver', $approverIds);
             } elseif ($role == 'Warehouse Custodian') {
                 $query->where('sta.from_branch', $branch);
             }
@@ -208,7 +220,7 @@ class StockTransferContoller extends BaseController
                 'reason_for_transfer' => $request->reason_for_transfer,
             ]);
 
-            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $stock->created_at);
+            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $stockTransfer->created_at);
 
             $stockTransfer->update(['reference_code' => $transactionNumber]);
 
@@ -272,9 +284,8 @@ class StockTransferContoller extends BaseController
 
                 $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
 
-
                 if ($nextApprover) {
-                    $nextApproverId = $nextApprover->approverId;
+                    $nextApproverId = $nextApprover->approver_role_id;
                 } else {
                     // no more approvers, mark record as fully approved
                     stock_transfer::where('id', $recordId)
@@ -293,7 +304,7 @@ class StockTransferContoller extends BaseController
             }
 
             if ($request->status == 2) {
-                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, null);
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'D');
 
                 stock_transfer::where('id', $recordId)->update([
                     'status'   => 2,
@@ -560,3 +571,4 @@ class StockTransferContoller extends BaseController
 		}
 	}
 }
+

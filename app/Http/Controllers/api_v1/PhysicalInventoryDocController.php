@@ -7,6 +7,7 @@ use App\Http\Traits\helper;
 use App\Models\branch;
 use App\Models\FilesUploaded;
 use App\Models\PhysicalInventoryDoc;
+use App\Models\user_role;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -76,18 +77,8 @@ class PhysicalInventoryDocController extends BaseController
                 'created_by'    => $user->id,
             ]);
 
-            $matrix =  $this->ApprovalMatrixActivityLog($validated['module_id'], $physicalInventory->id);
-
-            if ($matrix['status'] === 'error') {
-                return response()->json([
-                    'message' => 'Approval Matrix Error',
-                    'error'   => $matrix['message'],
-                ], 422);
-            }
-
-            // Update first approver or holder
-            $physicalInventory->approved_by = $matrix['message'];
-            $physicalInventory->save();
+            $transactionNumber = $this->generateTransactionNumber('stock_transfer', $physicalInventory->created_at);
+            $physicalInventory->update(['reference_code' => $transactionNumber]);
 
             $branch = branch::find($user->branch);
             if (!$branch) {
@@ -294,44 +285,66 @@ class PhysicalInventoryDocController extends BaseController
 
     public function submitApproverDecision(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'id'                => 'required|exists:physical_inventory_docs,id',
-            'decision'          => 'required|in:1,2', // 1 = approve, 2 = disapprove
-            'reason'            => 'nullable|string|max:255',
-            'current_module_id' => 'nullable|exists:system_menu,id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed.',
-                'errors'  => $validator->errors(),
-            ], 422);
-        }
-
-        $validated = $validator->validated();
-
-        DB::beginTransaction();
-
         try {
+            $validator = Validator::make($request->all(), [
+                'id'                => 'required|exists:physical_inventory_docs,id',
+                'decision'          => 'required|in:1,2', // 1 = approve, 2 = disapprove
+                'reason'            => 'nullable|string|max:255',
+                'current_module_id' => 'nullable|exists:system_menu,id',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation failed.',
+                    'errors'  => $validator->errors(),
+                ], 422);
+            }
+
+            $validated = $validator->validated();
+
+            $userId   = Auth::id();
+            $roleId   = user_role::where('user_role_name', Auth::user()->userrole)->value('id');
+            $moduleId = $request->current_module_id;
+            $recordId = $request->id;
+
+            // ✅ check if already approved
+            $check = $this->checkIfApproved($moduleId, $recordId, $roleId);
+            if ($check['status']) {
+                $approverName = $check['name'] ?? 'Unknown Approver';
+                return $this->sendError(
+                    "This request has already been approved by {$approverName}.",
+                    ['approver' => $check['approver']]
+                );
+            }
+
+            DB::beginTransaction();
+
+            $currentApprover = $this->getCurrentApprover($moduleId, $roleId);
+            $nextApproverId = null;
+
             $physicalInventory = PhysicalInventoryDoc::find($validated['id']);
             $userId = Auth::user()->id;
             $decision = (int) $validated['decision'];
             $nextApprover = null;
 
             if ($decision === 1) {
-                // APPROVED
-                $nextApprover = $this->approverDecision($validated['current_module_id'] ?? null, $physicalInventory->id, $userId);
-                if ($nextApprover === 0) {
-                    $physicalInventory->status = 1; // Approved
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'A');
+
+                $nextApprover = $this->getNextApprover($moduleId, $currentApprover->level);
+
+                if ($nextApprover) {
+                    $nextApproverId = $nextApprover->approverId;
+                } else {
+                    $physicalInventory->status = 1;
                 }
-            } elseif ($decision === 2) {
-                // DISAPPROVED
-                $firstApprover = $this->disapprovedDecision($validated['current_module_id'] ?? null, $physicalInventory->id, $userId);
-                $physicalInventory->status = 2; // Disapproved
-                $nextApprover = $firstApprover;
             }
 
-            $physicalInventory->approved_by = $nextApprover ?: ($decision === 1 && $nextApprover === 0 ? $userId : $nextApprover);
+            if ($decision === 2) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'D');
+                $physicalInventory->status = 2;
+            }
+
+            $physicalInventory->approved_by = $nextApproverId ?? $roleId;
             $physicalInventory->approved_date = Carbon::now();
             $physicalInventory->remarks = ($decision === 2 || $nextApprover === 0) ? ($validated['reason'] ?? null) : null;
             $physicalInventory->save();
