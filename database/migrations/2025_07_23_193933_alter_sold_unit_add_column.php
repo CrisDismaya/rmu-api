@@ -18,7 +18,7 @@ return new class extends Migration
 			$table->date('pt_date')->nullable();
 			$table->string('pt_bank')->nullable();
 			$table->float('pt_amount')->nullable();
-			$table->string('pt_uploads')->nullable();
+			$table->text('pt_uploads')->nullable();
 		});
     }
 

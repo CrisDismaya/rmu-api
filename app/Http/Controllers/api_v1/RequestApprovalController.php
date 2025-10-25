@@ -437,7 +437,7 @@ class RequestApprovalController extends BaseController
                     'sold_unit.pt_date',
                     'sold_unit.pt_bank',
                     'sold_unit.pt_amount',
-                    'sold_unit.pt_receipt_image'
+                    'sold_unit.pt_uploads'
                 )
                 ->join('branches as br', 'repo.branch_id', 'br.id')
                 ->join('brands as brd', 'repo.brand_id', 'brd.id')
@@ -1300,7 +1300,7 @@ class RequestApprovalController extends BaseController
                 $repo = repo::where('id', $input['repo_id'])->first();
 
                 if ($repo) {
-                    $folderName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $repo->engine . '-' . $repo->chassis);
+                    $folderName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $repo->model_engine . '-' . $repo->model_chassis);
                     $folder_path = 'image/sales_tagged/' . strtoupper($folderName);
                     $directory = public_path($folder_path);
 
@@ -1320,7 +1320,8 @@ class RequestApprovalController extends BaseController
                     foreach ($image_fields as $field => $label) {
                         if ($request->hasFile($field)) {
                             $image = $request->file($field);
-                            $image_name = strtoupper(uniqid() . '_' . $image->getClientOriginalName());
+                            $label_clean = str_replace(' ', '_', strtolower($label));
+                            $image_name = strtoupper(uniqid() . '_' . $label_clean . '.' . $image->getClientOriginalExtension());
                             $image->move($directory, $image_name);
 
                             $images_data[] = [
