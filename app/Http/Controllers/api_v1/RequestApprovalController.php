@@ -12,6 +12,7 @@ use App\Models\RequestApproval;
 use App\Models\unit_aging;
 use App\Models\receive_unit;
 use App\Models\sold_unit;
+use App\Models\repo;
 use App\Http\Traits\helper;
 use App\Http\Traits\acumaticaService;
 use App\Http\Traits\ResuableQuery;
@@ -1201,7 +1202,9 @@ class RequestApprovalController extends BaseController
                 'pt_date'       => 'required',
                 'pt_bank'       => 'required',
                 'pt_amount'     => 'required',
-                'pt_receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'pt_collection_receipt' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'pt_notice_to_release'  => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'pt_downpayment'        => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
             ];
 
             if ($request->sold_type === 'I') {
@@ -1268,6 +1271,8 @@ class RequestApprovalController extends BaseController
 
                 receive_unit::where('repo_id', $input['repo_id'])->update(['sold_type' => $input['sold_type'] ]);
 
+
+
                 //check for RNR uploading
                 if ($request->rate != '0.03') {
                     $folder_path = 'image/rnr';
@@ -1292,23 +1297,42 @@ class RequestApprovalController extends BaseController
                     }
                 }
 
-                if ($request->hasFile('pt_receipt_image')) {
-                    $folder_path = 'image/receipt';
+                $repo = repo::where('id', $input['repo_id'])->first();
+
+                if ($repo) {
+                    $folderName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $repo->engine . '-' . $repo->chassis);
+                    $folder_path = 'image/sales_tagged/' . strtoupper($folderName);
                     $directory = public_path($folder_path);
 
                     if (!File::isDirectory($directory)) {
                         File::makeDirectory($directory, 0777, true, true);
                     }
 
-                    $image = $request->file('pt_receipt_image');
-                    if ($image) {
-                        $image_name = strtoupper(uniqid() . '_' . $image->getClientOriginalName());
-                        $image->move($directory, $image_name);
+                    $image_fields = [
+                        'pt_collection_receipt' => 'Collection Receipt',
+                        'pt_notice_to_release'  => 'Notice to Release',
+                        'pt_downpayment'        => 'Downpayment',
+                    ];
 
-                        $create->pt_receipt_image = $folder_path . '/' . $image_name;
+                    $images_data = [];
+                    $id = 0;
+
+                    foreach ($image_fields as $field => $label) {
+                        if ($request->hasFile($field)) {
+                            $image = $request->file($field);
+                            $image_name = strtoupper(uniqid() . '_' . $image->getClientOriginalName());
+                            $image->move($directory, $image_name);
+
+                            $images_data[] = [
+                                'id' => $id++,
+                                'name' => $label,
+                                'directory' => $folder_path . '/' . $image_name,
+                            ];
+                        }
                     }
-                }
 
+                    $create->pt_uploads = json_encode($images_data);
+                }
 
                 $create->save();
                 $rec_id = $create->id;
