@@ -13,13 +13,12 @@ use App\Models\approval_matrix_setting;
 use App\Models\user_role;
 use App\Models\system_menu;
 use App\Http\Traits\ResuableQuery;
-
-
+use App\Traits\GeneratesPassword;
 
 class UserController extends BaseController
 {
 	//
-    use ResuableQuery; //helper traits
+    use ResuableQuery, GeneratesPassword; //helper traits
 
 	public function getRoles()
 	{
@@ -48,6 +47,28 @@ class UserController extends BaseController
 			return $this->sendError($th->errorInfo[2]);
 		}
 	}
+
+    public function getResetPassword($id)
+    {
+        try {
+            $newPassword = $this->generatePassword(12, true);
+
+            $user = User::find($id);
+
+            if (!$user) {
+                return $this->sendError('User not found.');
+            }
+
+            $user->password = Hash::make($newPassword);
+            $user->save();
+
+            return $this->sendResponse($newPassword, 'Password has been reset successfully.');
+        } catch (\Throwable $th) {
+            $errorMessage = method_exists($th, 'getMessage') ? $th->getMessage() : 'An unexpected error occurred.';
+            return $this->sendError($errorMessage);
+        }
+    }
+
 
 	public function register(Request $request)
 	{

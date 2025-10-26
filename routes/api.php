@@ -55,6 +55,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('getMyModules', [UserController::class, 'getAllModules']);
 			Route::get('approverByPage/{moduleid}', [UserController::class, 'approverByPage']);
 			Route::get('getAllNotification', [UserController::class, 'getAllNotification']);
+			Route::get('resetPassword/{id}', [UserController::class, 'getResetPassword']);
 
 			Route::post('changePassword', [UserController::class, 'changePassword']);
 			Route::get('deactivateUser/{id}/{status}', [UserController::class, 'deactivateUser']);
