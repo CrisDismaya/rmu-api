@@ -35,12 +35,13 @@ class sold_unit extends Model
         'path',
         'status',
         'remarks',
+        'transaction_number',
+        'transaction_number_inventory_out',
+        'inventory_out_at',
         'pt_receipt_no',
         'pt_date',
         'pt_bank',
         'pt_amount',
-        'pt_receipt_image',
-        'transaction_number',
-        'transaction_number_inventory_out',
+        'pt_uploads',
     ];
 }

@@ -13,6 +13,7 @@ use App\Models\RequestApproval;
 use App\Models\unit_aging;
 use App\Models\receive_unit;
 use App\Models\sold_unit;
+use App\Models\repo;
 use App\Models\user_role;
 use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
 use App\Http\Traits\helper;
@@ -381,6 +382,84 @@ class RequestApprovalController extends BaseController
         }
     }
 
+    public function getAllSoldUnits()
+    {
+        try {
+            $soldUnits = DB::table('sold_units as sold')
+                ->select(
+                    'sold.id',
+                    'repo.id as repo_id',
+                    'sold.transaction_number',
+                    'branch.name AS branch_name',
+                    DB::raw("
+                        LTRIM(RTRIM(
+                            CONCAT(
+                                new_owner.firstname, ' ',
+                                ISNULL(new_owner.middlename + ' ', ''),
+                                new_owner.lastname
+                            )
+                        )) AS new_owner
+                    "),
+                    DB::raw("
+                        CASE
+                            WHEN sold.sale_type = 'C' THEN 'CASH'
+                            ELSE 'INSTALLMENT'
+                        END AS sale_type
+                    "),
+                    'sold.sold_date',
+                    'brand.brandname',
+                    'model.model_name',
+                    'repo.model_engine AS engine',
+                    'repo.model_chassis AS chassis',
+                    'sold.srp AS suggested_retail_price',
+                    'sold.dp AS downpayment',
+                    'sold.amount_finance AS computed_loan_amount',
+                    'sold.interest_rate',
+                    'sold.terms',
+                    DB::raw("
+                        (sold.amount_finance +
+                        (sold.amount_finance * ((sold.interest_rate / 100) * (sold.terms / 12))))
+                        AS principal_amount
+                    "),
+                    'sold.invoice_reference_no',
+                    'sold.monthly_amo AS monthly_amortization',
+                    DB::raw("NULL AS ntr_reference_no"),
+                    DB::raw("
+                        (sold.srp -
+                        (sold.amount_finance +
+                        (sold.amount_finance * (sold.interest_rate / 100) * (sold.terms / 12))))
+                        AS gain_loss
+                    ")
+                )
+                ->join('repo_details as repo', function ($join) {
+                    $join->on('sold.repo_id', '=', 'repo.id')
+                        ->on('sold.branch', '=', 'repo.branch_id');
+                })
+                ->join('recieve_unit_details as received', function ($join) {
+                    $join->on('repo.id', '=', 'received.repo_id')
+                        ->on('repo.branch_id', '=', 'received.branch');
+                })
+                ->leftJoin('brands as brand', 'repo.brand_id', '=', 'brand.id')
+                ->leftJoin('unit_models as model', 'repo.model_id', '=', 'model.id')
+                ->leftJoin('customer_profile as new_owner', 'sold.new_customer', '=', 'new_owner.id')
+                ->leftJoin('branches as branch', 'repo.branch_id', '=', 'branch.id')
+                ->where('sold.status', 1);
+
+                if (Auth::user()->userrole == 'Warehouse Custodian') {
+                    $soldUnits->where('repo.branch_id', Auth::user()->branch);
+                }
+
+                return Datatables::of($soldUnits)
+                    ->order(function ($q) {
+                        $q->orderByDesc('sold.created_at');
+                    })->make(true);
+
+            return $soldUnits;
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
+
     public function getListForApproval($moduleid)
     {
 
@@ -454,7 +533,7 @@ class RequestApprovalController extends BaseController
                     'sold_unit.pt_date',
                     'sold_unit.pt_bank',
                     'sold_unit.pt_amount',
-                    'sold_unit.pt_receipt_image'
+                    'sold_unit.pt_uploads'
                 )
                 ->join('branches as br', 'repo.branch_id', 'br.id')
                 ->join('brands as brd', 'repo.brand_id', 'brd.id')
@@ -1269,7 +1348,9 @@ class RequestApprovalController extends BaseController
                 'pt_date'       => 'required',
                 'pt_bank'       => 'required',
                 'pt_amount'     => 'required',
-                'pt_receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'pt_collection_receipt' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'pt_notice_to_release'  => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'pt_downpayment'        => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
             ];
 
             if ($request->sold_type === 'I') {
@@ -1336,6 +1417,8 @@ class RequestApprovalController extends BaseController
 
                 receive_unit::where('repo_id', $input['repo_id'])->update(['sold_type' => $input['sold_type'] ]);
 
+
+
                 //check for RNR uploading
                 if ($request->rate != '0.03') {
                     $folder_path = 'image/rnr';
@@ -1360,23 +1443,43 @@ class RequestApprovalController extends BaseController
                     }
                 }
 
-                if ($request->hasFile('pt_receipt_image')) {
-                    $folder_path = 'image/receipt';
+                $repo = repo::where('id', $input['repo_id'])->first();
+
+                if ($repo) {
+                    $folderName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $repo->model_engine . '-' . $repo->model_chassis);
+                    $folder_path = 'image/sales_tagged/' . strtoupper($folderName);
                     $directory = public_path($folder_path);
 
                     if (!File::isDirectory($directory)) {
                         File::makeDirectory($directory, 0777, true, true);
                     }
 
-                    $image = $request->file('pt_receipt_image');
-                    if ($image) {
-                        $image_name = strtoupper(uniqid() . '_' . $image->getClientOriginalName());
-                        $image->move($directory, $image_name);
+                    $image_fields = [
+                        'pt_collection_receipt' => 'Collection Receipt',
+                        'pt_notice_to_release'  => 'Notice to Release',
+                        'pt_downpayment'        => 'Downpayment',
+                    ];
 
-                        $create->pt_receipt_image = $folder_path . '/' . $image_name;
+                    $images_data = [];
+                    $id = 0;
+
+                    foreach ($image_fields as $field => $label) {
+                        if ($request->hasFile($field)) {
+                            $image = $request->file($field);
+                            $label_clean = str_replace(' ', '_', strtolower($label));
+                            $image_name = strtoupper(uniqid() . '_' . $label_clean . '.' . $image->getClientOriginalExtension());
+                            $image->move($directory, $image_name);
+
+                            $images_data[] = [
+                                'id' => $id++,
+                                'name' => $label,
+                                'directory' => $folder_path . '/' . $image_name,
+                            ];
+                        }
                     }
-                }
 
+                    $create->pt_uploads = json_encode($images_data);
+                }
 
                 $create->save();
                 $rec_id = $create->id;

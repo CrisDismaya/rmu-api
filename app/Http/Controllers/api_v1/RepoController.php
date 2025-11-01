@@ -262,6 +262,7 @@ class RepoController extends BaseController
                     model.model_name,
                     UPPER(repo.model_engine) AS model_engine,
                     UPPER(repo.model_chassis) AS model_chassis,
+                    repo.year_model,
                     received.principal_balance,
                     received.loan_amount,
                     received.total_payments,

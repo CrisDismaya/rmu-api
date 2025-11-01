@@ -174,30 +174,95 @@ class StockTransferContoller extends BaseController
 		try {
 			return DB::select(
 				"SELECT
-					rud.id, brd.brandname, rep.model_engine, rep.model_chassis, clr.name AS color_name,
-					rep.plate_number, UPPER(mdl.model_name) AS model_name,
-					rep.date_sold, lst.date_surrender, DATEDIFF(day, rep.date_sold, lst.date_surrender) AS aging_unit_days,
-					rep.id AS repo_id
-				FROM stock_transfer_approval sta
-				INNER JOIN stock_transfer_unit stu ON sta.id = stu.stock_transfer_id
-				INNER JOIN recieve_unit_details rud ON stu.recieved_unit_id = rud.id
-				INNER JOIN repo_details AS rep ON rud.repo_id = rep.id
-				LEFT JOIN (
-					SELECT
-						MAX(brand_id) AS brand_id, MAX(model_id) AS model_id, MAX(date_surrender) AS date_surrender
-					FROM repo_details
-					GROUP BY brand_id, model_id
-				) lst ON rep.brand_id = lst.brand_id AND rep.model_id = lst.model_id
-				LEFT JOIN brands AS brd ON rep.brand_id = brd.id
-				LEFT JOIN unit_models AS mdl ON rep.model_id = mdl.id
-				LEFT JOIN unit_colors AS clr ON rep.color_id = clr.id
-				WHERE sta.id = ?",
+                    repo.id AS repo_id,
+                    CONCAT(customer.firstname, ' ', COALESCE(customer.middlename + ' ', ''), customer.lastname) AS ex_owner,
+                    brand.brandname AS brand,
+                    model.model_name AS model,
+                    repo.model_engine AS engine,
+                    repo.model_chassis AS chassis,
+                    color.name AS color,
+                    repo.year_model,
+                    repo.plate_number AS plate_number,
+                    CASE WHEN repo.unit_documents = 'CD' THEN 'Complete' ELSE 'Incomplete' END AS document_status,
+                    repo.orcr_status,
+                    null AS key_status,
+                    null AS loan_document_status
+                FROM stock_transfer_approval AS approval
+                INNER JOIN stock_transfer_unit AS unit ON approval.id = unit.stock_transfer_id
+                INNER JOIN recieve_unit_details  AS received ON unit.recieved_unit_id = received.id
+                INNER JOIN repo_details AS repo ON received.repo_id = repo.id
+                LEFT JOIN (
+                    SELECT
+                        MAX(brand_id) AS brand_id, MAX(model_id) AS model_id, MAX(date_surrender) AS date_surrender
+                    FROM repo_details
+                    GROUP BY brand_id, model_id
+                ) listed ON repo.brand_id = listed.brand_id AND repo.model_id = listed.model_id
+                LEFT JOIN brands AS brand ON repo.brand_id = brand.id
+                LEFT JOIN unit_models AS model ON repo.model_id = model.id
+                LEFT JOIN unit_colors AS color ON repo.color_id = color.id
+                LEFT JOIN customer_profile AS customer ON repo.customer_acumatica_id = customer.id
+                WHERE approval.id = ?
+                ORDER BY repo.created_at DESC",
 				array($id)
 			);
 		} catch (\Throwable $th) {
 			return $this->sendError($th->errorInfo[2]);
 		}
 	}
+
+    public function exportTransfersWithUnits()
+    {
+        try {
+            $query = DB::table('stock_transfer_approval as approval')
+                ->join('stock_transfer_unit as unit', 'approval.id', '=', 'unit.stock_transfer_id')
+                ->join('recieve_unit_details as received', 'unit.recieved_unit_id', '=', 'received.id')
+                ->join('repo_details as repo', 'received.repo_id', '=', 'repo.id')
+                ->leftJoinSub(
+                    DB::table('repo_details')
+                        ->select(
+                            DB::raw('MAX(brand_id) as brand_id'),
+                            DB::raw('MAX(model_id) as model_id'),
+                            DB::raw('MAX(date_surrender) as date_surrender')
+                        )
+                        ->groupBy('brand_id', 'model_id'),
+                    'listed',
+                    function ($join) {
+                        $join->on('repo.brand_id', '=', 'listed.brand_id')
+                            ->on('repo.model_id', '=', 'listed.model_id');
+                    }
+                )
+                ->leftJoin('brands as brand', 'repo.brand_id', '=', 'brand.id')
+                ->leftJoin('unit_models as model', 'repo.model_id', '=', 'model.id')
+                ->leftJoin('unit_colors as color', 'repo.color_id', '=', 'color.id')
+                ->leftJoin('customer_profile as customer', 'repo.customer_acumatica_id', '=', 'customer.id')
+                ->leftJoin('branches as origin', 'approval.from_branch', '=', 'origin.id')
+                ->leftJoin('branches as receiver', 'approval.to_branch', '=', 'receiver.id')
+                ->select(
+                    'origin.name as from_branch',
+                    'receiver.name as to_branch',
+                    DB::raw("CONCAT(customer.firstname, ' ', COALESCE(CONCAT(customer.middlename, ' '), ''), customer.lastname) as ex_owner"),
+                    'brand.brandname as brand',
+                    'model.model_name as model',
+                    'repo.model_engine as engine',
+                    'repo.model_chassis as chassis',
+                    'color.name as color',
+                    'repo.year_model',
+                    'repo.plate_number as plate_number',
+                    DB::raw("CASE WHEN repo.unit_documents = 'CD' THEN 'Complete' ELSE 'Incomplete' END as document_status"),
+                    'repo.orcr_status',
+                    DB::raw('NULL as key_status'),
+                    DB::raw('NULL as loan_document_status')
+                );
+
+            if (Auth::user()->userrole === 'Warehouse Custodian') {
+                $query->where('approval.from_branch', Auth::user()->branch);
+            }
+
+            return $query->orderByDesc('approval.reference_code')->get();
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	public function createStockTransfer(Request $request)
 	{

@@ -16,6 +16,7 @@ return new class extends Migration
         Schema::table('sold_units', function (Blueprint $table) {
 			$table->string('transaction_number')->nullable();
 			$table->string('transaction_number_inventory_out')->nullable();
+			$table->timestamp('inventory_out_at')->nullable();
 		});
     }
 
@@ -29,6 +30,7 @@ return new class extends Migration
         Schema::table('sold_units', function (Blueprint $table) {
             $table->dropColumn('transaction_number');
             $table->dropColumn('transaction_number_inventory_out');
+            $table->dropColumn('inventory_out_at');
         });
     }
 };
