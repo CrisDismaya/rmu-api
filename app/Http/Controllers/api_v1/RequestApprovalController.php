@@ -375,6 +375,84 @@ class RequestApprovalController extends BaseController
         }
     }
 
+    public function getAllSoldUnits()
+    {
+        try {
+            $soldUnits = DB::table('sold_units as sold')
+                ->select(
+                    'sold.id',
+                    'repo.id as repo_id',
+                    'sold.transaction_number',
+                    'branch.name AS branch_name',
+                    DB::raw("
+                        LTRIM(RTRIM(
+                            CONCAT(
+                                new_owner.firstname, ' ',
+                                ISNULL(new_owner.middlename + ' ', ''),
+                                new_owner.lastname
+                            )
+                        )) AS new_owner
+                    "),
+                    DB::raw("
+                        CASE
+                            WHEN sold.sale_type = 'C' THEN 'CASH'
+                            ELSE 'INSTALLMENT'
+                        END AS sale_type
+                    "),
+                    'sold.sold_date',
+                    'brand.brandname',
+                    'model.model_name',
+                    'repo.model_engine AS engine',
+                    'repo.model_chassis AS chassis',
+                    'sold.srp AS suggested_retail_price',
+                    'sold.dp AS downpayment',
+                    'sold.amount_finance AS computed_loan_amount',
+                    'sold.interest_rate',
+                    'sold.terms',
+                    DB::raw("
+                        (sold.amount_finance +
+                        (sold.amount_finance * ((sold.interest_rate / 100) * (sold.terms / 12))))
+                        AS principal_amount
+                    "),
+                    'sold.invoice_reference_no',
+                    'sold.monthly_amo AS monthly_amortization',
+                    DB::raw("NULL AS ntr_reference_no"),
+                    DB::raw("
+                        (sold.srp -
+                        (sold.amount_finance +
+                        (sold.amount_finance * (sold.interest_rate / 100) * (sold.terms / 12))))
+                        AS gain_loss
+                    ")
+                )
+                ->join('repo_details as repo', function ($join) {
+                    $join->on('sold.repo_id', '=', 'repo.id')
+                        ->on('sold.branch', '=', 'repo.branch_id');
+                })
+                ->join('recieve_unit_details as received', function ($join) {
+                    $join->on('repo.id', '=', 'received.repo_id')
+                        ->on('repo.branch_id', '=', 'received.branch');
+                })
+                ->leftJoin('brands as brand', 'repo.brand_id', '=', 'brand.id')
+                ->leftJoin('unit_models as model', 'repo.model_id', '=', 'model.id')
+                ->leftJoin('customer_profile as new_owner', 'sold.new_customer', '=', 'new_owner.id')
+                ->leftJoin('branches as branch', 'repo.branch_id', '=', 'branch.id')
+                ->where('sold.status', 1);
+
+                if (Auth::user()->userrole == 'Warehouse Custodian') {
+                    $soldUnits->where('repo.branch_id', Auth::user()->branch);
+                }
+
+                return Datatables::of($soldUnits)
+                    ->order(function ($q) {
+                        $q->orderByDesc('sold.created_at');
+                    })->make(true);
+
+            return $soldUnits;
+        } catch (\Throwable $th) {
+            return $this->sendError($th->getMessage());
+        }
+    }
+
     public function getListForApproval($moduleid)
     {
 

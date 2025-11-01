@@ -143,6 +143,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			//inventory
 			Route::get('InventoryMasterList', [RequestApprovalController::class, 'UnitInventoryMasterList']);
 			Route::get('SoldMasterList', [RequestApprovalController::class, 'SoldUnitMasterList']);
+            Route::get('getAllSoldUnits', [RequestApprovalController::class, 'getAllSoldUnits']);
 			Route::get('appraisedUnitList', [RequestApprovalController::class, 'appraisedUnitList']);
 			Route::get('getListForApproval/{moduleid}', [RequestApprovalController::class, 'getListForApproval']);
 			Route::get('UnitHistory/{repo_id}', [RequestApprovalController::class, 'UnitHistory']);
@@ -171,6 +172,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('branchesList', [StockTransferContoller::class, 'branchesList']);
 			Route::get('getAllForApprovals/{moduleid}', [StockTransferContoller::class, 'getAllForApprovals']);
 			Route::get('getTransferUnits/{id}', [StockTransferContoller::class, 'getTransferUnits']);
+			Route::get('exportTransfersWithUnits', [StockTransferContoller::class, 'exportTransfersWithUnits']);
 			Route::post('createStockTransfer', [StockTransferContoller::class, 'createStockTransfer']);
 			Route::post('transfer/submitApproverDecision', [StockTransferContoller::class, 'submitApproverDecision']);
 
