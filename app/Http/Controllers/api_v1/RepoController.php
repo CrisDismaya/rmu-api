@@ -754,19 +754,6 @@ class RepoController extends BaseController
 		try {
             $cteQuery = $this->cteQuery();
 
-            $role = DB::select("
-                DECLARE @module INT = :module, @userId INT = :userId;
-                {$cteQuery}
-
-                SELECT
-                    CASE (SELECT COUNT(approverId) FROM approvers WHERE module_id = @module AND approverId = @userId)
-                        WHEN 1 THEN 'Approver'
-                        ELSE 'Maker'
-                    END AS roles
-                ",
-                [ 'module' => $moduleid, 'userId' => Auth::user()->id ]
-            );
-
 			$stmt = DB::table('repo_details as rep')
 				->select(
 					'rep.*',
@@ -787,6 +774,7 @@ class RepoController extends BaseController
 					END AS current_status"),
 					DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
 					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
+                    DB::raw("CASE WHEN DATEDIFF(DAY, date_surrender, GETDATE()) >= 7 THEN 1 ELSE 0 END AS is_allowed_redemption")
 				)
 				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
 				->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
