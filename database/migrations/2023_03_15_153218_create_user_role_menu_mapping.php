@@ -17,7 +17,7 @@ class CreateUserRoleMenuMapping extends Migration
             $table->bigInteger('id', true);
             $table->integer('user_role_id');
             $table->integer('menu_id');
-            $table->integer('created_by');
+            $table->integer('created_by'); // 0 = System : 1 = User
             $table->timestamps();
         });
     }

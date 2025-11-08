@@ -11,6 +11,6 @@ class system_menu extends Model
 
     protected $table = 'system_menu';
     protected $fillable = [
-        'category_name', 'parent_id', 'menu_name', 'file_path', 'status',
+        'category_name', 'parent_id', 'menu_name', 'file_path', 'status', 'sort',
     ];
 }

@@ -12,8 +12,10 @@ use App\Models\User;
 use App\Models\approval_matrix_setting AS ApprovalMatrixSetting;
 use App\Models\user_role;
 use App\Models\system_menu;
+use App\Models\UserPermission;
 use App\Http\Traits\ResuableQuery;
 use App\Traits\GeneratesPassword;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends BaseController
 {
@@ -81,6 +83,7 @@ class UserController extends BaseController
 				'email' => 'required|email|unique:users',
 				'userrole' => 'required',
 				'password' => 'required',
+				'access_menus' => 'required',
 			]);
 
 			if ($validator->fails()) {
@@ -92,60 +95,130 @@ class UserController extends BaseController
 			$checker = User::where('employee_no', $request->employee_no)->count();
 
 			if ($checker > 0) {
+                DB::rollBack();
 				return $this->sendError('Validation Error.', 'User already exists!');
 			}
 
-			$input = $request->all();
-			$password_length = 8;
-			//  $random_password = substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($password_length/strlen($x)) )),1,$password_length);
-			$input['password'] = Hash::make($input['password']);
-			$input['status'] = '1';
-			$user = User::create($input);
-			//$success['default_password'] =  $random_password;
+			$user = User::create([
+                'employee_no' => $request->employee_no,
+                'firstname'   => $request->firstname,
+                'middlename'  => $request->middlename ?? null,
+                'lastname'    => $request->lastname,
+                'email'       => $request->email,
+                'branch'      => $request->branch,
+                'userrole'     => $request->userrole,
+                'password'    => Hash::make($request->password),
+                'status'      => '1',
+            ]);
+
+            $accessMenus = json_decode($request->access_menus, true);
+            if (is_array($accessMenus) && count($accessMenus) > 0) {
+                $role = user_role::where('role_status', 1)
+                    ->where('user_role_name', $user->userrole)
+                    ->first();
+
+                foreach ($accessMenus as $menu) {
+                    UserPermission::create([
+                        'user_id'           => $user->id,
+                        'role_id'           => $role->id,
+                        'menu_id'           => $menu['menu_id'],
+                        'view_permission'   => 1,
+                        'add_permission'    => $menu['add_permission'] ?? 0,
+                        'update_permission' => $menu['update_permission'] ?? 0,
+                        'approval_permission' => 0,
+                    ]);
+                }
+            }
+
+            DB::commit();
 
 			return $this->sendResponse([], 'User register successfully.');
 
-            DB::commit();
 		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
+			DB::rollBack();
+            Log::error('User registration failed', [
+                'error' => $th->getMessage(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+
+            return $this->sendError('Error registering user: ' . $th->getMessage());
 		}
 	}
 
 	public function updateUser(Request $request, $id)
-	{
+    {
+        $validator = Validator::make($request->all(), [
+            'employee_no' => 'required',
+            'firstname' => 'required',
+            'lastname' => 'required',
+            'userrole' => 'required',
+            'branch' => 'required',
+            'access_menus' => 'required',
+        ]);
 
-		try {
-			$validator = Validator::make($request->all(), [
-				'employee_no' => 'required',
-				'firstname' => 'required',
-				'lastname' => 'required',
-				// 'email' => 'required|email|unique:users',
-				'userrole' => 'required',
-				'branch' => 'required',
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error.', $validator->errors());
+        }
 
-			]);
+        try {
+            DB::beginTransaction();
 
-			if ($validator->fails()) {
-				return $this->sendError('Validation Error.', $validator->errors());
-			}
+            $user = User::findOrFail($id);
 
-			$input = $request->all();
-			unset($input['password']);
-			$user = User::where('id', $id)->update($input);
-			//$success['default_password'] =  $random_password;
+            $input = $request->except(['password', 'access_menus']);
+            $user->update($input);
 
-			return $this->sendResponse([], 'User updated successfully.');
-		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
-		}
-	}
+            $accessMenus = json_decode($request->access_menus, true);
+
+            if (is_array($accessMenus) && count($accessMenus) > 0) {
+
+                $role = user_role::where('role_status', 1)
+                    ->where('user_role_name', $user->userrole)
+                    ->first();
+
+                if ($role) {
+                    foreach ($accessMenus as $menu) {
+                        $existing = UserPermission::where('user_id', $user->id)
+                            ->where('role_id', $role->id)
+                            ->where('menu_id', $menu['menu_id'])
+                            ->first();
+
+                        $data = [
+                            'view_permission'     => 1,
+                            'add_permission'      => $menu['add_permission'] ?? 0,
+                            'update_permission'   => $menu['update_permission'] ?? 0,
+                            'approval_permission' => 0,
+                        ];
+
+                        if ($existing) {
+                            $existing->update($data);
+                        } else {
+                            UserPermission::create(array_merge($data, [
+                                'user_id' => $user->id,
+                                'role_id' => $role->id,
+                                'menu_id' => $menu['menu_id'],
+                            ]));
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return $this->sendResponse([], 'User updated successfully.');
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            return $this->sendError($th->getMessage());
+        }
+    }
 
 	public function users()
 	{
 		try {
+
 			$query = DB::table('users as a')
 				->leftjoin('branches as b', 'b.id', 'a.branch')
-				->leftjoin('user_role as c', 'a.userrole', 'c.user_role_name')
+                ->leftjoin('user_role as c', 'c.user_role_name', 'a.userrole')
 				->select('a.*', 'b.name as branch_name', 'c.id as role_id')
 				->where('a.id', '!=', '1')
 				->get();
@@ -316,11 +389,17 @@ class UserController extends BaseController
                     menu.category_name,
                     menu.menu_name,
                     menu.file_path,
-                    menu.parent_id
+                    menu.parent_id,
+		            menu.sort,
+                    COALESCE(perm.view_permission, 0) as view_permission,
+                    COALESCE(perm.add_permission, 0) as add_permission,
+                    COALESCE(perm.update_permission, 0) as update_permission,
+                    COALESCE(perm.approval_permission, 0) as approval_permission
                 FROM users usr
                 INNER JOIN user_role role ON usr.userrole = role.user_role_name
                 INNER JOIN user_role_menu_mapping map ON role.id = map.user_role_id
                 INNER JOIN system_menu menu ON map.menu_id = menu.id
+                LEFT JOIN user_module_permissions perm ON usr.id = perm.user_id AND role.id = perm.role_id AND menu.id = perm.menu_id
                 WHERE menu.status = 1 AND usr.id = @userId
                 ",
                 [ 'userId' => $user->user_id, 'roleId' => $user->role_id ]

@@ -765,57 +765,36 @@ class RepoController extends BaseController
 
             $userrole = Auth::user()->userrole;
 
-            $users = ApprovalMatrixSetting::getApprovalMatrix($moduleid, $userrole);
-
-            $userRow = collect($users)->first();
-
-            if (! $userRow) {
-                return DataTables::of(collect())->make(true);
-            }
-
-            $approverRoleId = $userRow->approver_role_id ?? null;
-            $approverUsersRaw = $userRow->approver_users ?? '[]';
-            $decoded = json_decode($approverUsersRaw, true);
-            $userIds = collect($decoded)->pluck('id')->all();
-            $currentUserId = Auth::id();
-
-            if (! in_array($currentUserId, $userIds)) {
-                return DataTables::of(collect())->make(true);
-            }
-            
-            $approverIds = is_array($approverRoleId) ? $approverRoleId : [$approverRoleId];
-
-            $stmt = DB::table('repo_details as rep')
-                ->select(
-                    'rep.*',
-                    'bth.name AS branch_name',
-                    'cus.acumatica_id',
-                    DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
-                    'brd.brandname',
-                    'mdl.model_name',
-                    'rep.model_engine',
-                    'rep.model_chassis',
-                    DB::raw("CASE
-                        WHEN rud.status = '4' THEN 'Repo Tagging Approval'
-                        WHEN rud.status = '0' AND UPPER(rud.is_sold) = 'N' THEN 'Subject for Reprice Approval'
-                        WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'N' THEN 'For Sell'
-                        WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'Y' THEN 'Sold'
-                        WHEN rud.status = '2' THEN 'Disapproved'
-                        ELSE ''
-                    END AS current_status"),
-                    // DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
-                    DB::raw("UPPER(role.user_role_name) AS approver_name"),
-                    DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status")
-                )
-                ->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
-                ->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
-                ->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
-                ->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
-                ->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
-                ->leftJoin('user_role as role', 'role.id', '=', 'rud.approver')
-                ->where('rud.status', '=', 4)
-                ->where('rud.approver', '=', $approverIds);
-
+			$stmt = DB::table('repo_details as rep')
+				->select(
+					'rep.*',
+					'bth.name AS branch_name',
+					'cus.acumatica_id',
+					DB::raw("CONCAT(cus.firstname, ' ', cus.lastname) AS customer_name"),
+					'brd.brandname',
+					'mdl.model_name',
+					'rep.model_engine',
+					'rep.model_chassis',
+					DB::raw("CASE
+						WHEN rud.status = '4' THEN 'Repo Tagging Approval'
+						WHEN rud.status = '0' AND UPPER(rud.is_sold) = 'N' THEN 'Subject for Reprice Approval'
+						WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'N' THEN 'For Sell'
+						WHEN rud.status = '1' AND UPPER(rud.is_sold) = 'Y' THEN 'Sold'
+						WHEN rud.status = '2' THEN 'Disapproved'
+						ELSE ''
+					END AS current_status"),
+					DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
+					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
+                    DB::raw("CASE WHEN DATEDIFF(DAY, date_surrender, GETDATE()) >= 7 THEN 1 ELSE 0 END AS is_allowed_redemption")
+				)
+				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
+				->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
+				->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
+				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
+				->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
+				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
+				->where('rud.status', '=', 4)
+            ->where('rud.approver', Auth::user()->id);
 
             return DataTables::of($stmt)
                 ->filter(function ($query) use ($request) {

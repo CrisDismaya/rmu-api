@@ -9,6 +9,7 @@ use App\Models\spare_parts;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Yajra\DataTables\Facades\DataTables;
 
 class PartsController extends BaseController
 {
@@ -55,6 +56,9 @@ class PartsController extends BaseController
                 // ->join('unit_models as b','b.id','a.model_id')
                 ->select('a.*')
                 ->get();
+
+            return DataTables::of($query)
+                ->make(true);
             return $query;
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);
