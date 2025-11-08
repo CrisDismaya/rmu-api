@@ -49,6 +49,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::post('register', [UserController::class, 'register'])
                 ->middleware('check.permission:add,15');
 			Route::get('users', [UserController::class, 'users']);
+			Route::get('roles', [UserController::class, 'roles']);
 			Route::post('updateUser/{id}', [UserController::class, 'updateUser'])
                 ->middleware('check.permission:update,15');
 			Route::post('createMatrix', [UserController::class, 'createApprovalMatrix']);

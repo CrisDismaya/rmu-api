@@ -125,7 +125,10 @@ class UpdateTransactionApprover extends Command
 
         if (!$matrix) return null;
 
-        $signatories = json_decode($matrix->signatories, true);
+        $signatories = is_array($matrix->signatories)
+            ? $matrix->signatories
+            : json_decode($matrix->signatories ?? '[]', true);
+
         return $signatories[0]['role'] ?? null;
     }
 

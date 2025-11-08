@@ -19,7 +19,7 @@ class PhysicalInventoryDoc extends Model
         'is_deleted',
         'deleted_at',
         'status',
-        'approved_by',
+        'approver',
         'approved_date',
         'reason',
         'remarks',

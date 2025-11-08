@@ -16,11 +16,13 @@ use App\Models\UserPermission;
 use App\Http\Traits\ResuableQuery;
 use App\Traits\GeneratesPassword;
 use Illuminate\Support\Facades\Log;
+use App\Enums\ApprovableModule;
+use App\Http\Traits\ResetPendingApproval;
 
 class UserController extends BaseController
 {
 	//
-    use ResuableQuery, GeneratesPassword; //helper traits
+    use ResuableQuery, GeneratesPassword, ResetPendingApproval; //helper traits
 
 	public function getRoles()
 	{
@@ -441,7 +443,7 @@ class UserController extends BaseController
             DB::commit();
 			return $this->sendResponse([], 'success');
 		} catch (\Throwable $th) {
-			return $this->sendError($th->errorInfo[2]);
+			return $this->sendError($th->getMessage());
 		}
 	}
 

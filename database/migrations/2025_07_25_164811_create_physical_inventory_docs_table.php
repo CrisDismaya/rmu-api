@@ -19,7 +19,7 @@ return new class extends Migration
             $table->date('selected_date');
 
             $table->integer('status')->default(0); // 0 = pending, 1 = approved, 2 = rejected
-            $table->string('approved_by')->nullable();
+            $table->string('approver')->nullable();
             $table->string('approved_date')->nullable();
             $table->string('reason')->nullable();
             $table->string('remarks')->nullable();

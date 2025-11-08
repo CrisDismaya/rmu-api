@@ -185,7 +185,7 @@ class PhysicalInventoryDocController extends BaseController
                     ->where('module_id', $module_id)
                     ->groupBy('reference_id');
             }, 'docs', 'docs.reference_id', '=', 'files.id')
-            ->leftJoin('users as approver', 'files.approved_by', '=', 'approver.id')
+            ->leftJoin('users as approver', 'files.approver', '=', 'approver.id')
             ->leftJoin('users as maker', 'files.created_by', '=', 'maker.id')
             ->leftJoin('branches as branch', 'files.branch_id', '=', 'branch.id');
 
@@ -196,7 +196,7 @@ class PhysicalInventoryDocController extends BaseController
                 $query;
             }
             else {
-                $query->where('files.approved_by', $user->id);
+                $query->where('files.approver', $user->id);
             }
 
         return DataTables::of($query)->make(true);
@@ -344,7 +344,7 @@ class PhysicalInventoryDocController extends BaseController
                 $physicalInventory->status = 2;
             }
 
-            $physicalInventory->approved_by = $nextApproverId ?? $roleId;
+            $physicalInventory->approver = $nextApproverId ?? $roleId;
             $physicalInventory->approved_date = Carbon::now();
             $physicalInventory->remarks = ($decision === 2 || $nextApprover === 0) ? ($validated['reason'] ?? null) : null;
             $physicalInventory->save();

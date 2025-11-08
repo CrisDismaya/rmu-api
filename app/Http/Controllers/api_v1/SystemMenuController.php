@@ -12,6 +12,7 @@ use App\Models\system_menu;
 use App\Models\menu_mapping;
 use App\Models\UserPermission;
 use Illuminate\Support\Facades\Log;
+use App\Enums\ApprovableModule;
 
 class SystemMenuController extends BaseController
 {

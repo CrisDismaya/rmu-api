@@ -762,7 +762,6 @@ class RepoController extends BaseController
 	public function fetch_repo_approval(Request $request, $moduleid)
     {
         try {
-
             $userrole = Auth::user()->userrole;
 
 			$stmt = DB::table('repo_details as rep')
@@ -783,18 +782,18 @@ class RepoController extends BaseController
 						WHEN rud.status = '2' THEN 'Disapproved'
 						ELSE ''
 					END AS current_status"),
-					DB::raw("UPPER(CONCAT(usr.firstname,' ',usr.lastname)) AS approver_name"),
+					DB::raw("role.user_role_name AS approver_name"),
 					DB::raw("CASE WHEN rud.status = 4 THEN 'Pending' ELSE 'Approved' END AS repo_status"),
-                    DB::raw("CASE WHEN DATEDIFF(DAY, date_surrender, GETDATE()) >= 7 THEN 1 ELSE 0 END AS is_allowed_redemption")
+                    DB::raw("CASE WHEN DATEDIFF(DAY, date_surrender, GETDATE()) <= 7 THEN 1 ELSE 0 END AS is_allowed_redemption")
 				)
 				->join('recieve_unit_details as rud', 'rep.id', '=', 'rud.repo_id')
 				->leftJoin('customer_profile as cus', 'rep.customer_acumatica_id', '=', 'cus.id')
 				->leftJoin('brands as brd', 'rep.brand_id', '=', 'brd.id')
 				->leftJoin('unit_models as mdl', 'rep.model_id', '=', 'mdl.id')
 				->leftJoin('branches as bth', 'rep.branch_id', '=', 'bth.id')
-				->leftJoin('users as usr', 'usr.id', '=', 'rud.approver')
+				->leftJoin('user_role as role', 'role.id', '=', 'rud.approver')
 				->where('rud.status', '=', 4)
-            ->where('rud.approver', Auth::user()->id);
+                ->where('role.user_role_name', '=', $userrole);
 
             return DataTables::of($stmt)
                 ->filter(function ($query) use ($request) {
