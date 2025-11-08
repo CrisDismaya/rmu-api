@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use App\Models\user_role;
+use App\Models\menu_mapping;
 
 class UserRoleController extends BaseController
 {
@@ -36,7 +37,14 @@ class UserRoleController extends BaseController
                 return $this->sendError('Validation Error.', 'Color already added!');
             }
 
-            user_role::create($format);
+            $role = user_role::create($format);
+
+            menu_mapping::create([
+                'user_role_id' => $role->id,
+                'menu_id' => 1,
+                'created_by' => 1,
+            ]);
+
             return $this->sendResponse([], 'Color added successfully.');
         } catch (\Throwable $th) {
             return $this->sendError($th->errorInfo[2]);

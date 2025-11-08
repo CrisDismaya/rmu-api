@@ -17,6 +17,7 @@ class SystemMenusTableSeeder extends Seeder
     {
         $system_menu = [
             [ "id" => 38, "category_name" => "Pages", "parent_id" => 0, "menu_name" => "Physical Inventory", "file_path" => "_physical_inventory.php", "status" => 1, "created_at" => Carbon::now(), "updated_at" => Carbon::now() ],
+            [ "id" => 39, "category_name" => "Settings", "parent_id" => 9, "menu_name" => "User Access Management", "file_path" => "_user-access-management.php", "status" => 1, "created_at" => Carbon::now(), "updated_at" => Carbon::now() ],
         ];
 
         DB::beginTransaction();
