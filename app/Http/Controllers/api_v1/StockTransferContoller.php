@@ -84,7 +84,7 @@ class StockTransferContoller extends BaseController
 						WHERE upload.is_deleted = 0
 						GROUP BY repo.id, upload.branch_id
 					) files ON files.repo_id = rep.id
-					WHERE rud.status NOT IN (4) AND UPPER(rud.is_sold) = 'N' AND rep.branch_id = ?
+					WHERE rud.status IN (1) AND UPPER(rud.is_sold) = 'N' AND rep.branch_id = ?
 					AND (app.current_branch IS NULL OR app.current_branch = rep.branch_id)
 					AND (app.approvalstatus IS NULL OR app.approvalstatus IN (1, 2))
 					AND (sld.id IS NULL OR sld.status IN (2))

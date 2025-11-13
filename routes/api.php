@@ -144,6 +144,7 @@ Route::middleware('auth:sanctum')->group( function () {
                 ->middleware('check.permission:update,3');
 			Route::get('fetch_repo_approval/{moduleid}', [RepoController::class, 'fetch_repo_approval']);
 			Route::post('repo_approver_decision', [RepoController::class, 'repo_approver_decision']);
+			Route::post('redemption', [RepoController::class, 'redemption']);
 
 			//receive unit
 			Route::post('createReceiveUnit', [ReceiveUnitController::class, 'createReceiveUnit']);

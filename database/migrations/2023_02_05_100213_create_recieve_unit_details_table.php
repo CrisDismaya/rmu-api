@@ -18,7 +18,7 @@ class CreateRecieveUnitDetailsTable extends Migration
             $table->integer('branch');
             $table->integer('repo_id');
             $table->double('unit_price');
-            $table->enum('status', [0, 1, 2, 4])->default(4); // 0: Pending, 1: Approved, 2: Rejected, 4: Reviewing for approval
+            $table->enum('status', [0, 1, 2, 4, 5])->default(4); // 0: Pending, 1: Approved, 2: Rejected, 4: Reviewing for approval, 5: Redemption
             $table->enum('is_sold', ['Y','N'])->default('N');
             $table->enum('sold_type',['I','C'])->nullable();
             $table->string('loan_amount')->nullable();

@@ -744,6 +744,7 @@ class RequestApprovalController extends BaseController
                     END AS aging_days,
                     1 AS quantity,
                     1 AS available,
+                    received.status AS is_redemption,
                     CASE
                         -- 1. SOLD (highest priority)
                         WHEN sold.status = 1 THEN 'Sold'
@@ -772,6 +773,7 @@ class RequestApprovalController extends BaseController
                         WHEN received.status = 0 THEN 'Pending for Repo Tagging Approval'
                         WHEN received.status = 2 THEN 'Disapproved for Repo Tagging Approval'
                         WHEN received.status = 4 THEN 'For Repo Reviewing for Approval'
+                        WHEN received.status = 5 THEN 'Redemption'
                         WHEN received.status = 1 THEN 'Available'
 
                         -- 7. DEFAULT

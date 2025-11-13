@@ -12,17 +12,21 @@ class receive_unit extends Model
 	protected $table = 'recieve_unit_details';
 
 	protected $fillable = [
-		'branch',
-		'repo_id',
-		'unit_price',
-		'loan_amount',
-		'total_payments',
-		'principal_balance',
-		'is_certified_no_parts',
-		'original_owner',
+        'branch',
+        'repo_id',
+        'unit_price',
+        'status',
+        'is_sold',
+        'sold_type',
+        'loan_amount',
+        'principal_balance',
+        'total_payments',
+        'is_certified_no_parts',
+        'original_owner',
         'original_owner_id',
-		'approver',
-		'date_approved',
+        'approver',
+        'date_approved',
+        'redemption_at',
 	];
 
 	function repo_details(){

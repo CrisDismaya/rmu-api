@@ -306,6 +306,7 @@ class RepoController extends BaseController
                         WHEN received.status = 0 THEN 'Pending for Repo Tagging Approval'
                         WHEN received.status = 2 THEN 'Disapproved for Repo Tagging Approval'
                         WHEN received.status = 4 THEN 'For Repo Reviewing for Approval'
+                        WHEN received.status = 5 THEN 'Redemption'
                         WHEN received.status = 1 THEN 'Available'
 
                         -- 7. DEFAULT
@@ -324,7 +325,9 @@ class RepoController extends BaseController
                     SELECT
                         uploaded.reference_id AS repo_id, uploaded.branch_id, COUNT(files_id) AS total_upload_required_files
                     FROM files_uploaded AS uploaded
+                    LEFT JOIN files ON uploaded.files_id = files.id
                     WHERE uploaded.module_id = 3 AND uploaded.is_deleted = 0
+                        AND files.isRequired = 1 AND files.status = 1
                     GROUP BY uploaded.reference_id, uploaded.branch_id
                 ) uploaded ON repo.id = uploaded.repo_id AND repo.branch_id = uploaded.branch_id
 
@@ -522,19 +525,35 @@ class RepoController extends BaseController
 
             Log::info('Transfer Details:', ['transfer' => $transfer]);
 
-			if (strtolower(Auth::user()->userrole) == 'warehouse custodian' && $transfer == null) {
-                Log::info('Warehouse Custodian - No Transfer Record Found. Disabling Edit.');
-				$disabled = true;
-			} else if (strtolower(Auth::user()->userrole) == 'warehouse custodian' && $transfer != null && $transfer->isreceived != "0") {
-                Log::info('Warehouse Custodian - Transfer Received. Disabling Edit.');
-				$disabled = false;
-			} else if (strtolower(Auth::user()->userrole) == 'verifier' && $transfer != null && $transfer->isreceived != "0") {
-                Log::info('Verifier - Transfer Received. Disabling Edit.');
-				$disabled = false;
-			} else {
-                Log::info('Other Roles - Disabling Edit.');
-				$disabled = true;
-			}
+            $role = strtolower(Auth::user()->userrole);
+            $branchId = Auth::user()->branch;
+            $disabled = true;
+
+            switch ($role) {
+                case 'warehouse custodian':
+                    if ($received->status == 2) {
+                        $disabled = false;
+                        Log::info("✅ Role: Warehouse Custodian — Edit enabled (status = 2: Disapproved).");
+                    } else {
+                        Log::info("🚫 Role: Warehouse Custodian — Edit disabled (status ≠ 2).");
+                    }
+                    break;
+
+                case 'verifier':
+                case 'general manager':
+                case 'administrator':
+                    if ($received->status == 1) {
+                        $disabled = false;
+                        Log::info("✅ Role: {$role} — Edit enabled (status = 1: Redemption/Available).");
+                    } else {
+                        Log::info("🚫 Role: {$role} — Edit disabled (status ≠ 1).");
+                    }
+                    break;
+
+                default:
+                    Log::info("🚫 Role: {$role} — Edit disabled (no edit permissions).");
+                    break;
+            }
 
 			$data = [
 				'repo' => $repo,
@@ -886,6 +905,10 @@ class RepoController extends BaseController
                 }
             }
 
+            if ($request->status == 2) {
+                $this->logApproval($moduleId, $recordId, $userId, $roleId, $currentApprover->level, 'D');
+            }
+
             receive_unit::where('id', $recordId)
                 ->update([
                     'status' => $request->status,
@@ -911,4 +934,44 @@ class RepoController extends BaseController
 			return $this->sendError($th->errorInfo[2]);
 		}
 	}
+
+    public function redemption(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'repoId' => 'required|numeric',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->sendError('Validation Error.', $validator->errors());
+            }
+
+            $repo = repo::find($request->repoId);
+            if (!$repo) {
+                return $this->sendError('Repo not found.');
+            }
+
+            $isRedemption = Carbon::now()->diffInDays(Carbon::parse($repo->date_surrender)) <= 7;
+
+            if (! $isRedemption) {
+                return $this->sendError('Redemption period has expired.');
+            }
+
+            receive_unit::where('repo_id', '=', $repo->id)
+                ->where('branch', '=', $repo->branch_id)
+                ->update([
+                    'status' => 5,
+                    'redemption_at' => Carbon::now(),
+                ]);
+
+            return $this->sendResponse([], 'Redemption processed successfully.');
+        } catch (\Throwable $th) {
+            Log::error("Redemption failed", [
+                'exception' => get_class($th),
+                'message' => $th->getMessage(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+            return $this->sendError($th->getMessage());
+        }
+    }
 }
