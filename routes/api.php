@@ -34,7 +34,12 @@ use App\Http\Controllers\api_v1\RequestRefurbishController;
 
 Route::post('login', [UserController::class, 'login']);
 Route::get('generateReport/{formtype}/{id}/{src}', [ReportController::class, 'generateReport']);
-
+Route::get('/public-test', function () {
+    return response()->json([
+        'message' => 'This is a public route!',
+        'status' => 'success'
+    ]);
+});
 Route::middleware('auth:sanctum')->group( function () {
 
 	Route::group(['middleware' => ['inputSanitation']], function () {

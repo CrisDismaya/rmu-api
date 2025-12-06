@@ -726,7 +726,6 @@ class RequestApprovalController extends BaseController
                             request.received_unit_id, MAX(history.appraisal_req_id) AS appraisal_req_id
                         FROM request_approvals request
                         LEFT JOIN appraisal_histories history ON request.id = history.appraisal_req_id
-                        WHERE request.status = 1
                         GROUP BY request.received_unit_id
                     ) sub
                     LEFT JOIN appraisal_histories history ON sub.appraisal_req_id = history.id
