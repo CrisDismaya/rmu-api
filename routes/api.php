@@ -40,6 +40,11 @@ Route::get('/public-test', function () {
         'status' => 'success'
     ]);
 });
+Route::options('{any}', function () {
+    return response()->json([], 204);
+})
+->where('any', '.*')
+->withoutMiddleware(['auth:sanctum']);
 Route::middleware('auth:sanctum')->group( function () {
 
 	Route::group(['middleware' => ['inputSanitation']], function () {
