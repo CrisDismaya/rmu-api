@@ -45,7 +45,7 @@ Route::options('{any}', function () {
 })
 ->where('any', '.*')
 ->withoutMiddleware(['auth:sanctum']);
-Route::middleware('auth:sanctum')->group( function () {
+Route::middleware(['auth:sanctum', 'preflight'])->group( function () {
 
 	Route::group(['middleware' => ['inputSanitation']], function () {
 
@@ -149,7 +149,7 @@ Route::middleware('auth:sanctum')->group( function () {
 			Route::get('appraisalHistory', [RequestApprovalController::class, 'appraisalHistory']);
 
 			//inventory
-			Route::get('InventoryMasterList', [RequestApprovalController::class, 'UnitInventoryMasterList']);
+			Route::post('InventoryMasterList', [RequestApprovalController::class, 'UnitInventoryMasterList']);
 			Route::get('SoldMasterList', [RequestApprovalController::class, 'SoldUnitMasterList']);
 			Route::get('appraisedUnitList', [RequestApprovalController::class, 'appraisedUnitList']);
 			Route::get('getListForApproval/{moduleid}', [RequestApprovalController::class, 'getListForApproval']);
